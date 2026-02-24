@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+venv/
+ENV/
+VENV/
+*.env
+*.venv
+
+# Python cache files
+.cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# VS Code and JetBrains IDEs
+.vscode/
+.idea/
+
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Git credentials or secrets (if ever used)
+secrets.json
+*.key
+*.pem
+*.crt
+
+# Project Specific Files
+*temp*.py
+Generic Product Barcodes.xlsx
+labels.pdf
+items.csv
+barcode_images/
+labels/
+custom_barcodes.csv
+custom_barcode_images/
+custom_labels/

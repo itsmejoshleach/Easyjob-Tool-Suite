@@ -1,0 +1,133 @@
+{% extends "base_layout.html" %}
+
+{% block title %}Custom Barcodes{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4 text-white">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Custom Barcodes</h2>
+        <div class="d-flex gap-2">
+            <!-- Clear All Button -->
+            <form method="POST" class="m-0">
+                <button class="btn btn-sm btn-outline-danger" name="clear" value="1">
+                    <i class="fa-solid fa-trash me-1"></i> Clear All Custom Barcodes
+                </button>
+            </form>
+            <!-- Add Custom Barcode Button -->
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addCustomModal">
+                <i class="fa-solid fa-plus me-1"></i> Add Custom Barcode
+            </button>
+        </div>
+    </div>
+
+    <!-- SEARCH FORM -->
+    <form method="POST" class="row g-2 mb-4">
+        <div class="col">
+            <input class="form-control form-control-lg"
+                   type="text"
+                   name="search"
+                   placeholder="Name or Barcode"
+                   value="{{ query }}">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary btn-lg">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+        </div>
+    </form>
+
+    <!-- CUSTOM BARCODE LIST -->
+    {% for item in items %}
+    <div class="item-card">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h5>{{ item.name }}</h5>
+                <p class="mb-2"><strong>Barcode:</strong> {{ item.barcode }}</p>
+            </div>
+
+            {% if item.label %}
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary"
+                        onclick="printLabel('{{ url_for('static', filename=item.label) }}')">
+                    <i class="fa-solid fa-print me-1"></i> Print Label
+                </button>
+
+                <form method="POST" action="{{ url_for('delete_label') }}">
+                    <input type="hidden" name="filepath" value="{{ item.label }}">
+                    <input type="hidden" name="page_type" value="custom">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="fa-solid fa-trash me-1"></i> Delete Label
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if item.label %}
+        <img class="label mt-3"
+             src="{{ url_for('static', filename=item.label) }}"
+             alt="Label for {{ item.name }}">
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-secondary">No custom barcodes found.</p>
+    {% endfor %}
+
+</div>
+
+<!-- ADD CUSTOM BARCODE MODAL -->
+<div class="modal fade" id="addCustomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('add_custom_barcode') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Custom Barcode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Barcode</label>
+                        <input class="form-control" name="barcode" required>
+                        <small class="text-muted">Can be any string, not just numbers.</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Add Custom Barcode</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function printLabel(imageUrl) {
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html>
+            <head>
+                <title>Print Label</title>
+                <style>
+                    @page { size: 50mm 25mm; margin: 0; }
+                    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                    img { width: 50mm; height: 25mm; object-fit: contain; }
+                </style>
+            </head>
+            <body onload="window.print(); window.close();">
+                <img src="${imageUrl}">
+            </body>
+        </html>
+    `);
+    win.document.close();
+}
+</script>
+{% endblock %}

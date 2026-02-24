@@ -1,0 +1,29 @@
+☐ Load item to job (barcoded)
+    Input (UKLE job no, RP barcode no)
+☐ load item to job (non barcoded)
+    Input UKLE job no, EJ device no)
+
+☐ unload item from job (barcoded)
+    Input (UKLE job no, RP barcode no)
+☐ unload item from job (non barcoded)
+    Input (UKLE job no, EJ device no)
+ 
+☐ query last job (barcode)
+    Input: RP Barcode no
+ 
+☐ how many in warehouse (item number)
+☐ how many on site (item number)
+ 
+☐ device info (item number)
+
+☐ get jobs from project
+
+✔ get job info @done(26-02-03 18:49)
+☐ get project info
+
+☐ get current jobs
+
+☐ list items on job
+☐ list items on job (non barcoded)
+
+☐ Be able to create job notifiers (email when a job is confirmed, etc)

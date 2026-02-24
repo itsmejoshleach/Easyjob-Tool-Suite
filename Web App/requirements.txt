@@ -1,0 +1,6 @@
+requests
+python-dotenv
+python-barcode
+pandas
+Flask
+pillow
