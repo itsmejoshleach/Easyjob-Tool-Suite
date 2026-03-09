@@ -11,6 +11,7 @@
 import requests
 import os
 from typing import Optional, Dict, Any
+from urllib.parse import quote
 import urllib3
 from dotenv import load_dotenv, set_key, find_dotenv
 
@@ -41,7 +42,7 @@ def _error(message):
     raise RuntimeError(message)
 
 def _saveTOKEN(token: str): 
-    # Self explanitory - Save token to .env
+    # Save token to .env
     global TOKEN
     TOKEN = token
     if dotenv_path:
@@ -54,15 +55,32 @@ def _headers() -> Dict[str, str]:
     return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 def _request_with_auto_reauth(method: str, path: str, **kwargs):
-    # What it says on the tin - It does a request, and auto reauths the token using username & password creds -Returns request response
+    # Does a request, and auto reauths the token using username & password creds - Returns request response
     url = f"{BASE_URL}{path}"
     try:
         response = requests.request(method, url, headers=_headers(), timeout=TIMEOUT, verify=VERIFY_CERT, **kwargs)
         if response.status_code == 401:
             authenticate()  # refresh token
             response = requests.request(method, url, headers=_headers(), timeout=TIMEOUT, verify=VERIFY_CERT, **kwargs)
+        
+        # Check for specific error codes before raising
+        if response.status_code == 500:
+            _error(f"API server error (500) for endpoint: {path}")
+        
         response.raise_for_status()
-        return response.json()
+        
+        # Try to parse JSON response
+        try:
+            json_data = response.json()
+            # Check if response is just an error code like "0"
+            if json_data == "0" or json_data == 0:
+                _error(f"API returned error code 0 - item/barcode not found or invalid")
+            return json_data
+        except ValueError:
+            _error(f"API returned invalid JSON: {response.text[:200]}")
+            
+    except requests.exceptions.HTTPError as e:
+        _error(f"HTTP Error {e.response.status_code}: {e.response.reason} for {path}")
     except requests.exceptions.RequestException as exception:
         _error(f"EasyJob request failed: {exception}")
 
@@ -141,20 +159,40 @@ def get_items_in_job(jobno: str):
     # List items on job
     return _get(f"/api.json/Items/BillOfItems/?id={jobno}")
 
+def get_device_list(item_id: str, search_text: str = ""):
+    # Get all devices for an item type (stock levels)
+    return _get(f"/api.json/Items/DeviceList/?id={item_id}&searchtext={search_text}")
+
 # Info Functions
 
-def get_device_info(devicebarcode: str):
+def get_device_info(devicebarcode: str, debug=False):
     # List Device info (Barcoded Devices)
-    return _get(f"/api.json/Common/BarcodeSearch?id={devicebarcode}")
+    # URL encode the barcode to handle special characters like /
+    encoded_barcode = quote(devicebarcode, safe='')
+    endpoint = f"/api.json/Common/BarcodeSearch?id={encoded_barcode}"
+    
+    if debug:
+        _log(f"Searching for barcode: {devicebarcode}")
+        _log(f"Encoded as: {encoded_barcode}")
+        _log(f"Full endpoint: {BASE_URL}{endpoint}")
+    
+    result = _get(endpoint)
+    
+    if debug:
+        _log(f"API Response: {result}")
+    
+    return result
 
 def get_job_info(searchname: str):
-    # I mean: Read the title of the function; It gets info on  ajob - why are you checking the comments for this?
-    return _get(f"/api.json/Jobs/List/?style=List&searchtext=*{searchname}")
+    # Gets info on a job
+    # URL encode the search term to handle special characters
+    encoded_search = quote(f"*{searchname}", safe='*')
+    return _get(f"/api.json/Jobs/List/?style=List&searchtext={encoded_search}")
 
 # Other
 
 def test_connection(): 
-    # Simple test to check API connectivity and authentication. / Returns server info if token works.
+    # Simple test to check API connectivity and authentication - Returns server info if token works
     return _get("/api.json/Common/GetGlobalWebSettings")
 
 
@@ -174,4 +212,3 @@ def print_items_in_job(searchterm: str):
             'days': item.get('Days', 1)  # include Days if needed, default 1
         }
     return jobitems_dict
-
