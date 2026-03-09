@@ -49,3 +49,5 @@ labels/
 custom_barcodes.csv
 custom_barcode_images/
 custom_labels/
+combined_output.py
+combined_output.txt
