@@ -1,29 +1,115 @@
-Job watchers:
-    ☐ Copy item list into job watchers json file
-    ☐ Poll every half hour for changes
-    ☐ Send notfication if changed
-    ☐ Show changes in web ui page
-Add job watcher (poll for job confirmation / unlocking):
-    ☐ Add job info to job watcher file
-    ☐ Watch for change in status
-    ☐ Report as notification if change
-    ☐ Show changes via web ui
-Add item watcher (poll for if an item of kit returns on that day / show when next in):
-    ☐ Search when items are back from jobs, and show quantity
-Stock check:
-    ☐ Scan a device ID, or Item ID and it tells you how many is currently in warehouse & how many currently out on jobs
-Item Search:
-    ☐ Add another button "More Info" that shows a profile for the item.
-    ☐ Popup profile shows associated items
-    ☐ Popup profile shows description of what it looks like + image
-    ☐ Popup profile shows description of what it does in laymans terms
-    ☐ Popup profile shows description of the situations it's used in
-    ☐ Popup profile shows list of similar items
-    ☐ Popup profile shows how to use it.
+# Web App TODO - Inventory Management Interface
 
-☐ Download all items
-    ☐ Do as cron
-☐ sort into non barcoded and barcoded items
-☐ create generic barcodes for the non-barcoded items
-☐ fill out the information with "Not filled Out Yet"
-☐ make an extra side nav tab for items which haven't been filled out yet
+## High Priority Features
+
+### Polling Page
+- [ ] Implement job watcher functionality
+  - [ ] Create job watcher JSON storage
+  - [ ] Poll EasyJob API every 30 minutes
+  - [ ] Detect job status changes
+  - [ ] Send notifications on changes
+  - [ ] Display changes in web UI
+- [ ] Add job confirmation/unlock notifications
+- [ ] Show job status timeline
+- [ ] Add item availability watcher
+  - [ ] Track when items return from jobs
+  - [ ] Show next available date
+
+### Stock Check Page
+- [ ] Create new stock check page/tab
+- [ ] Add barcode scanner input field
+- [ ] Display item information on scan
+  - [ ] Show quantity in warehouse
+  - [ ] Show quantity on jobs
+  - [ ] Show availability status
+- [ ] Support both Device ID and Item ID lookup
+
+### Item Search Enhancements
+- [ ] Add "More Info" button to item cards
+- [ ] Create item profile modal/popup
+  - [ ] Show associated/related items
+  - [ ] Display physical description
+  - [ ] Show item image/photo
+  - [ ] Add layman's terms description
+  - [ ] List common use case scenarios
+  - [ ] Show similar/alternative items
+  - [ ] Include usage instructions
+
+## Medium Priority Features
+
+### Data Management
+- [ ] Download all items from EasyJob
+  - [ ] Implement as cron job/scheduled task
+  - [ ] Auto-sync on schedule
+- [ ] Separate barcoded vs non-barcoded items
+- [ ] Generate generic barcodes for non-barcoded items
+- [ ] Auto-populate missing fields with "Not filled out yet"
+- [ ] Create "Incomplete Items" sidebar tab
+  - [ ] List items needing information
+  - [ ] Allow quick editing
+
+### Item Management
+- [ ] Add bulk CSV import
+- [ ] Add bulk CSV export
+- [ ] Implement item categories/tags
+- [ ] Add item image upload
+- [ ] Support multiple barcode formats
+- [ ] Add item duplication feature
+
+### Label Features
+- [ ] Create multiple label templates
+- [ ] Add QR code support
+- [ ] Support custom label sizes
+- [ ] Batch label printing
+- [ ] Export labels to PDF
+
+## Low Priority Features
+
+### User Interface
+- [ ] Add user authentication/login
+- [ ] Implement access control/permissions
+- [ ] Add dark/light theme toggle (currently dark only)
+- [ ] Improve mobile responsiveness
+- [ ] Add keyboard shortcuts
+- [ ] Implement drag-and-drop for images
+
+### Performance & Quality
+- [ ] Replace CSV with SQLite/PostgreSQL
+- [ ] Add pagination for large item lists
+- [ ] Implement search result caching
+- [ ] Add loading indicators
+- [ ] Improve error messages
+- [ ] Add input validation
+
+### Advanced Features
+- [ ] Item history/audit log
+- [ ] Advanced search filters
+- [ ] Saved searches
+- [ ] Export reports
+- [ ] Item usage statistics
+- [ ] Low stock alerts
+
+## Completed ✓
+- [x] Item search functionality
+- [x] Wildcard search support (`*` character)
+- [x] Add new items
+- [x] Custom barcode creation
+- [x] Barcode label generation (50mm x 25mm)
+- [x] Print label functionality
+- [x] Delete individual labels
+- [x] Delete items from inventory
+- [x] Clear all custom barcodes
+- [x] Sidebar navigation
+- [x] Glass-morphism UI design
+- [x] Dark theme
+- [x] Bootstrap 5 integration
+- [x] Responsive layout
+- [x] CSV storage for items and custom barcodes
+
+## Notes
+- Currently using CSV files for data storage
+- Barcode API: `https://barcodeapi.org/api/code128/{barcode}`
+- Labels generated at 300 DPI
+- Font: `monofonto rg.otf`
+- Network access currently disabled
+- All static files in `/static/` directory

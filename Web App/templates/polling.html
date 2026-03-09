@@ -1,9 +1,160 @@
 {% extends "base_layout.html" %}
+{% block title %}Polling{% endblock %}
+
 {% block content %}
 <div class="glass-card p-4 text-white">
-    <h2>Polling</h2>
-    <p class="text-secondary">Coming soon: Job notifications and interaction with EasyJob.</p>
-    <ul>- Adding notifiers for when a job gets confirmed. / Unlocked.</ul>
-    <ul>- Job watcher: Watches specific jobs for changes</ul>
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <h2 class="mb-0"><i class="fa-solid fa-chart-line me-2"></i>Job Watchers</h2>
+            {% if not ej_ok %}
+            <span class="badge bg-warning text-dark">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i> EasyJob not configured
+            </span>
+            {% endif %}
+        </div>
+
+        <div class="d-flex gap-2">
+            <!-- Manual refresh -->
+            <form method="POST" action="{{ url_for('polling_refresh') }}">
+                <button class="btn btn-sm btn-outline-secondary" {% if not ej_ok %}disabled{% endif %}>
+                    <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh Now
+                </button>
+            </form>
+            <!-- Add watcher -->
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addWatcherModal"
+                    {% if not ej_ok %}disabled{% endif %}>
+                <i class="fa-solid fa-plus me-1"></i> Watch Job
+            </button>
+        </div>
+    </div>
+
+    <p class="text-secondary mb-4 small">
+        Watches EasyJob jobs for status changes (confirmed, unlocked, etc.).
+        Polls automatically every 30 minutes. Use <em>Refresh Now</em> to check immediately.
+    </p>
+
+    <!-- WATCHER LIST -->
+    {% if watchers %}
+    <div class="row g-3">
+        {% for w in watchers %}
+        <div class="col-md-6">
+            <div class="item-card position-relative
+                        {% if w.has_change %} border border-warning {% endif %}"
+                 style="{% if w.has_change %}border-color: rgba(255,193,7,0.6) !important;{% endif %}">
+
+                <!-- Change badge -->
+                {% if w.has_change %}
+                <span class="badge bg-warning text-dark position-absolute top-0 end-0 m-2">
+                    <i class="fa-solid fa-bell me-1"></i> Changed
+                </span>
+                {% endif %}
+
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="mb-0">{{ w.label }}</h6>
+                        <small class="text-secondary">Job No: <code>{{ w.job_no }}</code></small>
+                    </div>
+                </div>
+
+                <!-- Status row -->
+                <div class="d-flex gap-3 mb-2 flex-wrap">
+                    <div>
+                        <span class="text-secondary small">Status </span>
+                        {% if w.last_status %}
+                        <span class="badge bg-secondary">{{ w.last_status }}</span>
+                        {% else %}
+                        <span class="text-secondary small">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary small">Locked </span>
+                        {% if w.last_locked %}
+                        <span class="badge bg-danger"><i class="fa-solid fa-lock me-1"></i>Yes</span>
+                        {% else %}
+                        <span class="badge bg-success"><i class="fa-solid fa-lock-open me-1"></i>No</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if w.last_changed %}
+                <p class="text-secondary small mb-2">
+                    <i class="fa-solid fa-clock me-1"></i> Last changed: {{ w.last_changed }}
+                </p>
+                {% endif %}
+
+                {% if w.error %}
+                <div class="alert alert-danger py-1 px-2 small mb-2">
+                    <i class="fa-solid fa-circle-xmark me-1"></i>{{ w.error }}
+                </div>
+                {% endif %}
+
+                <p class="text-secondary small mb-3">
+                    <i class="fa-solid fa-calendar-plus me-1"></i> Watching since {{ w.added }}
+                </p>
+
+                <!-- Actions -->
+                <div class="d-flex gap-2 flex-wrap">
+                    {% if w.has_change %}
+                    <form method="POST" action="{{ url_for('polling_clear_flag') }}">
+                        <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                        <button class="btn btn-sm btn-outline-warning">
+                            <i class="fa-solid fa-check me-1"></i> Mark as Seen
+                        </button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('polling_remove') }}">
+                        <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                        <button class="btn btn-sm btn-outline-danger">
+                            <i class="fa-solid fa-trash me-1"></i> Remove
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="text-center text-secondary py-5">
+        <i class="fa-solid fa-satellite-dish fa-3x mb-3" style="opacity:0.3;"></i>
+        <p class="mb-1">No jobs being watched yet.</p>
+        <p class="small">Click <strong>Watch Job</strong> to start monitoring a job for changes.</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- ADD WATCHER MODAL -->
+<div class="modal fade" id="addWatcherModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('polling_add') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Watch a Job</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">CT Job Number</label>
+                        <input class="form-control" name="job_no" placeholder="e.g. 3148.03" required>
+                        <div class="form-text">The EasyJob / CT job reference number.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Label <span class="text-secondary">(optional)</span></label>
+                        <input class="form-control" name="label" placeholder="e.g. Glastonbury Main Stage">
+                        <div class="form-text">A friendly name so you remember which job this is.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">
+                        <i class="fa-solid fa-satellite-dish me-1"></i> Start Watching
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}

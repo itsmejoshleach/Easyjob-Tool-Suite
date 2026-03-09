@@ -1,0 +1,134 @@
+{% extends "base_layout.html" %}
+{% block title %}Stock Check{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4 text-white">
+
+    <div class="d-flex align-items-center mb-4 gap-3">
+        <h2 class="mb-0"><i class="fa-solid fa-warehouse me-2"></i>Stock Check</h2>
+        {% if not ej_ok %}
+        <span class="badge bg-warning text-dark">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> EasyJob not configured
+        </span>
+        {% endif %}
+    </div>
+
+    <p class="text-secondary mb-4">
+        Enter an EasyJob Item ID or scan a Rental-Point barcode to see how many units
+        are in the warehouse vs. out on jobs.
+    </p>
+
+    <!-- SEARCH FORM -->
+    <form method="POST" class="mb-4">
+        <div class="row g-2 align-items-end">
+            <div class="col">
+                <label class="form-label small text-secondary">Item ID or Barcode</label>
+                <input class="form-control form-control-lg" type="text" name="query"
+                       placeholder="e.g. 1042  or  BP2/205"
+                       value="{{ query }}" autofocus>
+            </div>
+            <div class="col-auto">
+                <label class="form-label small text-secondary">Scan type</label>
+                <select class="form-select form-select-lg" name="scan_type">
+                    <option value="item_id" {% if request.form.get('scan_type','item_id')=='item_id' %}selected{% endif %}>
+                        EJ Item ID
+                    </option>
+                    <option value="barcode" {% if request.form.get('scan_type')=='barcode' %}selected{% endif %}>
+                        RP Barcode
+                    </option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary btn-lg">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Check
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- ERROR -->
+    {% if error %}
+    <div class="alert alert-danger d-flex align-items-center gap-2">
+        <i class="fa-solid fa-circle-xmark fa-lg"></i>
+        <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <!-- RESULT -->
+    {% if result %}
+    <div class="mt-2">
+        <h5 class="mb-3">
+            <i class="fa-solid fa-box me-2 text-info"></i>{{ result.name }}
+            <span class="text-secondary small ms-2">
+                {% if result.type == 'barcode' %}
+                    (Barcode: {{ result.query }})
+                {% else %}
+                    (Item ID: {{ result.item_id }})
+                {% endif %}
+            </span>
+        </h5>
+
+        <div class="row g-3 mb-4">
+            <!-- In warehouse -->
+            <div class="col-md-4">
+                <div class="p-3 rounded text-center"
+                     style="background: rgba(25,135,84,0.15); border:1px solid rgba(25,135,84,0.4);">
+                    <div class="fs-1 fw-bold text-success">{{ result.warehouse }}</div>
+                    <div class="text-secondary small mt-1">
+                        <i class="fa-solid fa-warehouse me-1"></i> In Warehouse
+                    </div>
+                </div>
+            </div>
+
+            <!-- Out on jobs -->
+            <div class="col-md-4">
+                <div class="p-3 rounded text-center"
+                     style="background: rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.35);">
+                    <div class="fs-1 fw-bold text-warning">{{ result.on_site }}</div>
+                    <div class="text-secondary small mt-1">
+                        <i class="fa-solid fa-truck me-1"></i> Out on Jobs
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total -->
+            <div class="col-md-4">
+                <div class="p-3 rounded text-center"
+                     style="background: rgba(13,110,253,0.12); border:1px solid rgba(13,110,253,0.35);">
+                    <div class="fs-1 fw-bold text-primary">{{ result.total }}</div>
+                    <div class="text-secondary small mt-1">
+                        <i class="fa-solid fa-layer-group me-1"></i> Total Stock
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw API data (collapsible) -->
+        <div class="accordion" id="rawAccordion">
+            <div class="accordion-item bg-transparent border-secondary">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed bg-transparent text-secondary small py-2"
+                            type="button" data-bs-toggle="collapse" data-bs-target="#rawCollapse">
+                        <i class="fa-solid fa-code me-2"></i> Raw API response
+                    </button>
+                </h2>
+                <div id="rawCollapse" class="accordion-collapse collapse">
+                    <div class="accordion-body p-0 pt-2">
+                        <pre class="text-secondary small p-3 rounded"
+                             style="background:rgba(0,0,0,0.3); max-height:250px; overflow-y:auto;">{{ result.raw | tojson(indent=2) if result.raw else result.device | tojson(indent=2) }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not result and not error and not query %}
+    <div class="text-center text-secondary py-4">
+        <i class="fa-solid fa-barcode fa-3x mb-3" style="opacity:0.3;"></i>
+        <p class="mb-0">Enter an Item ID or barcode above to check stock levels.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

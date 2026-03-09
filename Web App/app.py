@@ -1,4 +1,12 @@
+import sys
 import os
+
+# Add parent directory to Python path to import API module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import the easyjob module from API
+from API import easyjob as ej
+
 import csv
 import re
 import requests
@@ -258,11 +266,285 @@ def delete_label():
     return redirect(url_for("index") if page_type=="items" else url_for("custom_barcodes"))
 
 # ------------------------
-# Polling placeholder
+# STOCK CHECK
 # ------------------------
+@app.route("/stock_check", methods=["GET", "POST"])
+def stock_check():
+    result = None
+    error = None
+    query = ""
+    ej_ok = False
+    
+    # Check if EasyJob is configured
+    try:
+        if not ej.TOKEN:
+            ej.quick_login()
+        ej_ok = True
+    except:
+        ej_ok = False
+    
+    if request.method == "POST":
+        scan_type = request.form.get("scan_type", "item_id")
+        query = request.form.get("query", "").strip()
+        
+        if not query:
+            error = "Please enter a barcode or item ID"
+        elif not ej_ok:
+            error = "EasyJob is not configured. Check your .env credentials."
+        else:
+            try:
+                if scan_type == "barcode":
+                    # Search by RP barcode (e.g., BP2/205)
+                    device_info = ej.get_device_info(query)
+                    
+                    # API returns a dict with device info, not a list
+                    if device_info and isinstance(device_info, dict) and device_info.get("Id"):
+                        # Get the item ID from the device
+                        item_id = device_info.get("Additional", {}).get("IdStockType")
+                        
+                        if item_id:
+                            try:
+                                # Get all devices of this type
+                                device_list = ej.get_device_list(item_id)
+                                
+                                # Calculate stock counts from device list
+                                total = 0
+                                warehouse = 0
+                                on_jobs = 0
+                                
+                                if isinstance(device_list, list):
+                                    total = len(device_list)
+                                    
+                                    for dev in device_list:
+                                        # Device is on a job if it has IdJob set
+                                        # This includes devices in workshop (which appear as a job)
+                                        if dev.get("IdJob"):
+                                            on_jobs += 1
+                                        else:
+                                            warehouse += 1
+                                
+                                result = {
+                                    "type": "barcode",
+                                    "query": query,
+                                    "name": device_info.get("Caption", "Unknown"),
+                                    "item_id": item_id,
+                                    "warehouse": warehouse,
+                                    "on_site": on_jobs,
+                                    "total": total,
+                                    "device": device_info,
+                                    "raw": device_list
+                                }
+                            except Exception as e:
+                                # If device list fails, show device info without stock counts
+                                result = {
+                                    "type": "barcode",
+                                    "query": query,
+                                    "name": device_info.get("Caption", "Unknown"),
+                                    "item_id": item_id,
+                                    "warehouse": "N/A",
+                                    "on_site": "N/A",
+                                    "total": "N/A",
+                                    "device": device_info
+                                }
+                                error = f"Found device but couldn't get stock levels: {str(e)}"
+                        else:
+                            error = f"Could not find item ID for device: {query}"
+                    else:
+                        error = f"No device found for barcode: {query}"
+                
+                elif scan_type == "item_id":
+                    # Search by Item ID directly
+                    try:
+                        device_list = ej.get_device_list(query)
+                        
+                        # Calculate stock counts
+                        total = 0
+                        warehouse = 0
+                        on_jobs = 0
+                        item_name = "Unknown Item"
+                        
+                        if isinstance(device_list, list):
+                            total = len(device_list)
+                            
+                            for dev in device_list:
+                                if not item_name or item_name == "Unknown Item":
+                                    item_name = dev.get("Caption", "Unknown Item")
+                                
+                                # Device is on a job if it has IdJob set
+                                # This includes devices in workshop (which appear as a job)
+                                if dev.get("IdJob"):
+                                    on_jobs += 1
+                                else:
+                                    warehouse += 1
+                        
+                        result = {
+                            "type": "item_id",
+                            "query": query,
+                            "name": item_name,
+                            "item_id": query,
+                            "warehouse": warehouse,
+                            "on_site": on_jobs,
+                            "total": total,
+                            "raw": device_list
+                        }
+                    except Exception as e:
+                        error = f"No item found with ID: {query} - {str(e)}"
+                    
+            except RuntimeError as e:
+                # This catches errors from easyjob._error()
+                error = str(e)
+            except Exception as e:
+                error = f"Unexpected error: {str(e)}"
+    
+    return render_template("stock_check.html", 
+                         result=result, 
+                         error=error, 
+                         query=query,
+                         ej_ok=ej_ok,
+                         page="stock_check")
+
+# ------------------------
+# POLLING / JOB WATCHER
+# ------------------------
+import json
+from datetime import datetime
+
+WATCHERS_FILE = os.path.join(os.path.dirname(__file__), "job_watchers.json")
+
+def load_watchers():
+    # Load job watchers from JSON file
+    if not os.path.exists(WATCHERS_FILE):
+        return []
+    try:
+        with open(WATCHERS_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_watchers(watchers):
+    # Save job watchers to JSON file
+    with open(WATCHERS_FILE, 'w') as f:
+        json.dump(watchers, f, indent=2)
+
 @app.route("/polling")
 def polling():
-    return render_template("polling.html", page="polling")
+    watchers = load_watchers()
+    ej_ok = False
+    
+    # Check if EasyJob is configured
+    try:
+        if not ej.TOKEN:
+            ej.quick_login()
+        ej_ok = True
+    except:
+        ej_ok = False
+    
+    return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="polling")
+
+@app.route("/polling/add", methods=["POST"])
+def polling_add():
+    job_no = request.form.get("job_no", "").strip()
+    label = request.form.get("label", "").strip()
+    
+    if not job_no:
+        return redirect(url_for("polling"))
+    
+    watchers = load_watchers()
+    
+    # Check if already watching this job
+    if any(w["job_no"] == job_no for w in watchers):
+        return redirect(url_for("polling"))
+    
+    # Try to get initial job info
+    try:
+        if not ej.TOKEN:
+            ej.quick_login()
+        
+        job_info = ej.get_job_info(job_no)
+        if job_info and len(job_info) > 0:
+            job_data = job_info[0]
+            watcher = {
+                "job_no": job_no,
+                "label": label if label else job_data.get("Caption", job_no),
+                "added": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "last_status": job_data.get("Status", "Unknown"),
+                "last_locked": job_data.get("IsLocked", False),
+                "last_changed": None,
+                "has_change": False,
+                "error": None
+            }
+            watchers.append(watcher)
+            save_watchers(watchers)
+    except Exception as e:
+        # Add anyway with error
+        watcher = {
+            "job_no": job_no,
+            "label": label if label else job_no,
+            "added": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "last_status": None,
+            "last_locked": None,
+            "last_changed": None,
+            "has_change": False,
+            "error": str(e)
+        }
+        watchers.append(watcher)
+        save_watchers(watchers)
+    
+    return redirect(url_for("polling"))
+
+@app.route("/polling/remove", methods=["POST"])
+def polling_remove():
+    job_no = request.form.get("job_no", "").strip()
+    watchers = load_watchers()
+    watchers = [w for w in watchers if w["job_no"] != job_no]
+    save_watchers(watchers)
+    return redirect(url_for("polling"))
+
+@app.route("/polling/clear_flag", methods=["POST"])
+def polling_clear_flag():
+    job_no = request.form.get("job_no", "").strip()
+    watchers = load_watchers()
+    for w in watchers:
+        if w["job_no"] == job_no:
+            w["has_change"] = False
+    save_watchers(watchers)
+    return redirect(url_for("polling"))
+
+@app.route("/polling/refresh", methods=["POST"])
+def polling_refresh():
+    watchers = load_watchers()
+    
+    try:
+        if not ej.TOKEN:
+            ej.quick_login()
+        
+        for w in watchers:
+            try:
+                job_info = ej.get_job_info(w["job_no"])
+                if job_info and len(job_info) > 0:
+                    job_data = job_info[0]
+                    new_status = job_data.get("Status", "Unknown")
+                    new_locked = job_data.get("IsLocked", False)
+                    
+                    # Check if anything changed
+                    if (w["last_status"] != new_status or 
+                        w["last_locked"] != new_locked):
+                        w["has_change"] = True
+                        w["last_changed"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    
+                    w["last_status"] = new_status
+                    w["last_locked"] = new_locked
+                    w["error"] = None
+                else:
+                    w["error"] = "Job not found"
+            except Exception as e:
+                w["error"] = str(e)
+        
+        save_watchers(watchers)
+    except Exception as e:
+        pass
+    
+    return redirect(url_for("polling"))
 
 # ------------------------
 # RUN
