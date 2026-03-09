@@ -1,29 +1,29 @@
-☐ Load item to job (barcoded)
-    Input (UKLE job no, RP barcode no)
-☐ load item to job (non barcoded)
-    Input UKLE job no, EJ device no)
+☐ Convert postman fork to python functions
 
-☐ unload item from job (barcoded)
-    Input (UKLE job no, RP barcode no)
-☐ unload item from job (non barcoded)
-    Input (UKLE job no, EJ device no)
- 
+✘ Load item to job (barcoded) @cancelled(26-03-07 22:04)
+    ✘ Input (UKLE job no, RP barcode no) @cancelled(26-03-07 22:04)
+✘ load item to job (non barcoded) @cancelled(26-03-07 22:04)
+    ✘ Input UKLE job no, EJ device no) @cancelled(26-03-07 22:04)
+✘ unload item from job (barcoded) @cancelled(26-03-07 22:04)
+    ✘ Input (UKLE job no, RP barcode no) @cancelled(26-03-07 22:04)
+✘ unload item from job (non barcoded) @cancelled(26-03-07 22:04)
+    ✘ Input (UKLE job no, EJ device no) @cancelled(26-03-07 22:04)
+
+
+Other Custom API functions:
 ☐ query last job (barcode)
-    Input: RP Barcode no
- 
+    - Finds the last job the barcode was on
+    - Input: RP Barcode no
 ☐ how many in warehouse (item number)
 ☐ how many on site (item number)
- 
 ☐ device info (item number)
-
 ☐ get jobs from project
-
+    - list jobs within a project
 ✔ get job info @done(26-02-03 18:49)
 ☐ get project info
-
 ☐ get current jobs
-
+    -  Jobs going out within 14 days
 ☐ list items on job
 ☐ list items on job (non barcoded)
-
-☐ Be able to create job notifiers (email when a job is confirmed, etc)
+☐ list how many items on job
+- Given a specfic item number, list how many of that item on the job - and provide sections and counts per section.

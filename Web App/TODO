@@ -1,0 +1,29 @@
+Job watchers:
+    ☐ Copy item list into job watchers json file
+    ☐ Poll every half hour for changes
+    ☐ Send notfication if changed
+    ☐ Show changes in web ui page
+Add job watcher (poll for job confirmation / unlocking):
+    ☐ Add job info to job watcher file
+    ☐ Watch for change in status
+    ☐ Report as notification if change
+    ☐ Show changes via web ui
+Add item watcher (poll for if an item of kit returns on that day / show when next in):
+    ☐ Search when items are back from jobs, and show quantity
+Stock check:
+    ☐ Scan a device ID, or Item ID and it tells you how many is currently in warehouse & how many currently out on jobs
+Item Search:
+    ☐ Add another button "More Info" that shows a profile for the item.
+    ☐ Popup profile shows associated items
+    ☐ Popup profile shows description of what it looks like + image
+    ☐ Popup profile shows description of what it does in laymans terms
+    ☐ Popup profile shows description of the situations it's used in
+    ☐ Popup profile shows list of similar items
+    ☐ Popup profile shows how to use it.
+
+☐ Download all items
+    ☐ Do as cron
+☐ sort into non barcoded and barcoded items
+☐ create generic barcodes for the non-barcoded items
+☐ fill out the information with "Not filled Out Yet"
+☐ make an extra side nav tab for items which haven't been filled out yet
