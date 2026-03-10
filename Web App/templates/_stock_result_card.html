@@ -1,0 +1,77 @@
+{% set total     = result.total %}
+{% set warehouse = result.warehouse %}
+{% set on_jobs   = result.on_jobs %}
+{% set workshop  = result.workshop %}
+
+<div class="result-card">
+    <h5 class="mb-3">
+        <i class="fa-solid fa-box-open me-2 text-secondary"></i>
+        {{ result.name }}
+        <span class="text-secondary small ms-2" style="font-weight:400;">ID: {{ result.item_id }}</span>
+    </h5>
+
+    <div class="d-flex flex-wrap gap-3 mb-3">
+
+        <div class="stat-pill pill-warehouse">
+            <span class="num">{{ warehouse | int if warehouse is not none else '—' }}</span>
+            <span class="lbl"><i class="fa-solid fa-warehouse me-1"></i>In Warehouse</span>
+        </div>
+
+        {% if workshop is not none %}
+        <!-- Full breakdown: separate on_jobs and workshop pills -->
+        <div class="stat-pill pill-jobs">
+            <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
+            <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out on Jobs</span>
+        </div>
+        <div class="stat-pill pill-workshop">
+            <span class="num">{{ workshop | int }}</span>
+            <span class="lbl"><i class="fa-solid fa-screwdriver-wrench me-1"></i>Workshop</span>
+        </div>
+        {% else %}
+        <!-- Inventory-only: on_jobs includes workshop, can't split them -->
+        <div class="stat-pill pill-jobs">
+            <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
+            <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out / Workshop</span>
+        </div>
+        {% endif %}
+
+        <div class="stat-pill pill-total">
+            <span class="num">{{ total | int if total is not none else '—' }}</span>
+            <span class="lbl"><i class="fa-solid fa-layer-group me-1"></i>Total Owned</span>
+        </div>
+
+    </div>
+
+    <!-- Stacked bar — only show if we have the full numbers -->
+    {% if total and total | int > 0 and warehouse is not none and on_jobs is not none %}
+    {% set w_pct = (warehouse | int / total | int * 100) | round(1) %}
+    {% set j_pct = (on_jobs   | int / total | int * 100) | round(1) %}
+    {% set s_pct = (workshop  | int / total | int * 100) | round(1) if workshop is not none else 0 %}
+    <div class="stock-bar-track">
+        <div>
+            <div style="width:{{ w_pct }}%; background:#20c997; height:100%;"></div>
+            <div style="width:{{ j_pct }}%; background:#ffc107; height:100%;"></div>
+            {% if workshop is not none %}
+            <div style="width:{{ s_pct }}%; background:#0dcaf0; height:100%;"></div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="d-flex gap-3 mt-2" style="font-size:0.72rem; color:#adb5bd;">
+        <span><span style="color:#20c997;">■</span> Warehouse {{ w_pct }}%</span>
+        <span><span style="color:#ffc107;">■</span> {{ 'On Jobs' if workshop is not none else 'Out / Workshop' }} {{ j_pct }}%</span>
+        {% if workshop is not none %}
+        <span><span style="color:#0dcaf0;">■</span> Workshop {{ s_pct }}%</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Raw API toggle -->
+    <button class="raw-toggle" onclick="toggleRaw(this)">show raw API response</button>
+    <div class="raw-data">Avail response:
+{{ result.raw | tojson(indent=2) }}
+{% if result.sample_device %}
+
+Sample device record (first device — shows available status fields):
+{{ result.sample_device | tojson(indent=2) }}
+{% endif %}</div>
+</div>
