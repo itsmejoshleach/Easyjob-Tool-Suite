@@ -102,7 +102,8 @@ def load_items(query=""):
             "name":        name,
             "description": row["Item Description / Alternate Names"],
             "barcode":     row["Barcode Number"],
-            "label":       f"labels/{safe}_label.png"
+            "label":       f"labels/{safe}_label.png",
+            "profile":     None   # placeholder for future "More Info" feature
         })
     return items
 
@@ -278,32 +279,32 @@ def _unwrap(data):
         return data[0] if data else None
     return data
 
-def _get_total_from_details(item_id):
-    # Try Items/Details for a qty field first.
-    # Fallback: count DeviceList by unique InventoryNumber.
-    #
-    # Why unique InventoryNumber?
-    # - EJ API DeviceList returns ALL records including inactive ones (no active/inactive flag).
-    # - Inactive devices are replacement units: the old @si record is deactivated but kept,
-    #   and a new @si record is created with the same InventoryNumber (e.g. BP2/001).
-    # - Active devices that haven't been replaced have exactly one @si per InventoryNumber.
-    # - Deduplicating by InventoryNumber therefore gives the correct active count (773).
-    details = _unwrap(ej.get_item_details(item_id))
-    if details:
-        total = (
-            details.get("Qty") or
-            details.get("StockQty") or
-            details.get("QuantityTotal") or
-            details.get("Quantity")
-        )
-        if total is not None:
-            return total
+def _get_total_owned(item_id):
+    # Use RentalInventory from Items/Details - this is the active owned count EJ UI shows.
+    # Fallback: DeviceList with inactive exclusion set if Details doesn't have the field.
+    try:
+        details = _unwrap(ej.get_item_details(item_id))
+        if details:
+            total = details.get("RentalInventory")
+            if total is not None:
+                return int(total)
+    except Exception:
+        pass
 
+    # Fallback: exclude known inactive @si barcodes from DeviceList.
+    # Inactive set cross-referenced from EJ UI active vs show-inactive exports (2026-03-10).
+    _inactive = {
+        "@si94788", "@si94824", "@si94837", "@si94853", "@si94862",
+        "@si94921", "@si94928", "@si94987", "@si94992", "@si94997",
+        "@si95004", "@si95007", "@si95010", "@si95020", "@si95042",
+        "@si95052", "@si95070", "@si95084", "@si95110", "@si95115",
+        "@si95131", "@si95132", "@si95159", "@si95165", "@si95170",
+    }
     try:
         devices = ej.get_device_list(item_id)
-        if isinstance(devices, list):
-            unique = len({d.get("InventoryNumber") for d in devices if d.get("InventoryNumber")})
-            return unique if unique else len(devices)
+        if isinstance(devices, list) and devices:
+            active = [d for d in devices if d.get("Barcode") not in _inactive]
+            return len(active) if active else None
     except Exception:
         pass
 
@@ -402,7 +403,7 @@ def stock_check():
                             error = f"Found device '{name}' but could not resolve Item ID."
                         else:
                             avail       = ej.get_item_availability(item_id)
-                            total_owned = _get_total_from_details(item_id)
+                            total_owned = _get_total_owned(item_id)
                             result      = _parse_avail(avail, item_id, name, total_owned)
                             if not result:
                                 error = f"No availability data for item ID {item_id}."
@@ -411,7 +412,7 @@ def stock_check():
                 elif scan_type == "item_id":
                     item_details = _unwrap(ej.get_item_details(int(query)))
                     name        = item_details.get("Caption", query) if item_details else query
-                    total_owned = _get_total_from_details(int(query))
+                    total_owned = _get_total_owned(int(query))
                     avail       = ej.get_item_availability(int(query))
                     result      = _parse_avail(avail, query, name, total_owned)
                     if not result:
@@ -430,7 +431,7 @@ def stock_check():
                             if not item_id:
                                 continue
                             try:
-                                total_owned = item.get("Qty") or item.get("StockQty") or item.get("QuantityTotal")
+                                total_owned = _get_total_owned(item_id)
                                 avail       = ej.get_item_availability(item_id)
                                 parsed      = _parse_avail(avail, item_id, name, total_owned)
                                 if parsed:

@@ -136,8 +136,8 @@ def get_all_items(searchtext: str = ""):
     return _get("/api.json/Items/List/", params=params)
 
 def get_item_details(item_id: int):
-    # Returns detailed info for a single item
-    return _get(f"/api.json/Items/Details/{item_id}")
+    # Returns detailed info for a single item, including RentalInventory (total active owned count)
+    return _get(f"/api.json/Items/Details/?id={item_id}")
 
 def get_item_availability(item_id: int, start_date: str = None, end_date: str = None, stock_id: int = None):
     # Returns availability data for an item.
