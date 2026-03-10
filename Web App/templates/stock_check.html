@@ -3,10 +3,6 @@
 
 {% block head %}
 <style>
-    .scan-tabs .btn { border-radius: 6px; font-size: 0.85rem; }
-    .scan-tabs .btn.active { background: rgba(13,110,253,0.3); border-color: #0d6efd; color: #fff; }
-    .scan-tabs .btn:not(.active) { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); color: #adb5bd; }
-
     .result-card {
         background: rgba(255,255,255,0.05);
         border: 1px solid rgba(255,255,255,0.08);
@@ -23,15 +19,26 @@
         gap: 2px;
         min-width: 115px;
     }
-    .stat-pill .num  { font-size: 1.6rem; font-weight: 700; line-height: 1; }
-    .stat-pill .lbl  { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; }
-    .pill-warehouse  { background: rgba(32,201,151,0.15); border: 1px solid rgba(32,201,151,0.3); color: #20c997; }
-    .pill-jobs       { background: rgba(255,193,7,0.15);  border: 1px solid rgba(255,193,7,0.3);  color: #ffc107; }
-    .pill-workshop   { background: rgba(13,202,240,0.15); border: 1px solid rgba(13,202,240,0.3); color: #0dcaf0; }
-    .pill-total      { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #dee2e6; }
+    .stat-pill .num { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+    .stat-pill .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; }
+    .pill-warehouse { background: rgba(32,201,151,0.15);  border: 1px solid rgba(32,201,151,0.3);  color: #20c997; }
+    .pill-jobs      { background: rgba(255,193,7,0.15);   border: 1px solid rgba(255,193,7,0.3);   color: #ffc107; }
+    .pill-workshop  { background: rgba(13,202,240,0.15);  border: 1px solid rgba(13,202,240,0.3);  color: #0dcaf0; }
+    .pill-total     { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #dee2e6; }
 
     .stock-bar-track { background: rgba(255,255,255,0.08); border-radius: 6px; height: 10px; overflow: hidden; margin-top: 8px; }
     .stock-bar-track > div { display: flex; height: 100%; }
+
+    .hint-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .hint-chip {
+        font-size: 0.72rem; color: #6c757d;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 20px; padding: 3px 10px;
+        cursor: pointer; transition: border-color 0.15s, color 0.15s;
+        user-select: none;
+    }
+    .hint-chip:hover { border-color: rgba(255,255,255,0.3); color: #adb5bd; }
 
     .raw-toggle {
         font-size: 0.72rem; color: #6c757d; cursor: pointer;
@@ -53,33 +60,50 @@
         border: 1px solid rgba(220,53,69,0.3);
         border-radius: 10px; padding: 14px 18px; color: #f8d7da;
     }
+
+    /* Loading overlay */
+    #loadingOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(10,12,16,0.7);
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+    }
+    #loadingOverlay.active { display: flex; }
+    .spinner-ring {
+        width: 52px; height: 52px;
+        border: 4px solid rgba(255,255,255,0.1);
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-label { font-size: 0.85rem; color: #adb5bd; letter-spacing: 0.04em; }
+    .loading-query { font-size: 0.75rem; color: #6c757d; max-width: 300px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 {% endblock %}
 
 {% block content %}
+
+<!-- Loading overlay -->
+<div id="loadingOverlay">
+    <div class="spinner-ring"></div>
+    <span class="loading-label">Querying EasyJob…</span>
+    <span class="loading-query" id="loadingQuery"></span>
+</div>
+
 <div class="glass-card p-4 text-white">
 
-    <h2 class="mb-4"><i class="fa-solid fa-warehouse me-2"></i>Stock Check</h2>
+    <h2 class="mb-1"><i class="fa-solid fa-warehouse me-2"></i>Stock Check</h2>
+    <p class="text-secondary small mb-4">Search by item name, RP barcode, EJ number, or item ID — all resolve to stock-type level.</p>
 
     <!-- Search form -->
-    <form method="POST" id="stockForm">
-
-        <!-- Search type tabs -->
-        <div class="scan-tabs d-flex gap-2 mb-3">
-            <button type="button" class="btn {% if scan_type == 'item_name' %}active{% endif %}"
-                    onclick="setScanType('item_name')">
-                <i class="fa-solid fa-magnifying-glass me-1"></i> Item Name
-            </button>
-            <button type="button" class="btn {% if scan_type == 'item_id' %}active{% endif %}"
-                    onclick="setScanType('item_id')">
-                <i class="fa-solid fa-hashtag me-1"></i> Item ID
-            </button>
-            <button type="button" class="btn {% if scan_type == 'barcode' %}active{% endif %}"
-                    onclick="setScanType('barcode')">
-                <i class="fa-solid fa-barcode me-1"></i> RP Barcode
-            </button>
-        </div>
-
+    <form method="POST" id="stockForm" onsubmit="showLoading()">
         <input type="hidden" name="scan_type" id="scan_type" value="{{ scan_type }}">
 
         <div class="row g-2">
@@ -89,7 +113,7 @@
                        name="query"
                        id="queryInput"
                        value="{{ query }}"
-                       placeholder="{{ 'Item name or wildcard, e.g. Camera*' if scan_type == 'item_name' else ('Numeric item ID, e.g. 1042' if scan_type == 'item_id' else 'RP barcode, e.g. BP2/205') }}"
+                       placeholder="e.g.  BP2  /  BP2/205  /  1007969.00  /  ROE BP2"
                        autofocus>
             </div>
             <div class="col-auto">
@@ -98,6 +122,23 @@
                 </button>
             </div>
         </div>
+
+        <!-- Hint chips -->
+        <div class="hint-chips">
+            <span class="text-secondary" style="font-size:0.72rem; line-height:2;">Try:</span>
+            <span class="hint-chip" onclick="setQuery('BP2/205')">BP2/205 <span style="opacity:0.45;">— specific device</span></span>
+            <span class="hint-chip" onclick="setQuery('@si94884')">@si94884 <span style="opacity:0.45;">— @si barcode</span></span>
+            <span class="hint-chip" onclick="setQuery('94884')">94884 <span style="opacity:0.45;">— bare @si number</span></span>
+            <span class="hint-chip" onclick="setQuery('10934')">10934 <span style="opacity:0.45;">— EJ item ID</span></span>
+            <span class="hint-chip" onclick="setQuery('1007969.00')">1007969.00 <span style="opacity:0.45;">— EJ item number</span></span>
+            <span class="hint-chip" onclick="setQuery('BP2')">BP2 <span style="opacity:0.45;">— base barcode</span></span>
+            <span class="hint-chip" onclick="setQuery('ROE BP2')">ROE BP2 <span style="opacity:0.45;">— name search</span></span>
+        </div>
+
+        <p class="text-secondary mt-3 mb-0" style="font-size:0.75rem;">
+            <i class="fa-solid fa-circle-info me-1"></i>
+            Name and base barcode searches query all matching items — may take a few seconds.
+        </p>
     </form>
 
     <hr class="border-secondary my-4">
@@ -117,27 +158,35 @@
         <strong>Error:</strong> {{ error }}
     </div>
 
-    <!-- Single result (barcode / item_id search) -->
+    <!-- Single result -->
     {% elif result %}
-    {% include '_stock_result_card.html' with context %}
+        {% set item = result %}
+        {% include '_stock_result_card.html' with context %}
 
-    <!-- Multiple results (item_name search) -->
+    <!-- Multiple results -->
     {% elif results is not none %}
         {% if results %}
         <p class="text-secondary small mb-3">{{ results|length }} item(s) found for <strong>{{ query }}</strong></p>
         {% for item in results %}
-            {% set result = item %}
             {% include '_stock_result_card.html' with context %}
         {% endfor %}
         {% else %}
         <p class="text-secondary">No results found for <strong>{{ query }}</strong>.</p>
         {% endif %}
 
-    <!-- Default empty state -->
+    <!-- Empty state -->
     {% elif not query %}
-    <p class="text-secondary">
-        Search by item name, numeric item ID, or scan an RP barcode to see live stock levels from EasyJob.
-    </p>
+    <div class="text-secondary" style="line-height:2; font-size:0.85rem;">
+        <p class="mb-2">Accepts any of the following:</p>
+        <div class="d-flex flex-column gap-1">
+            <span><code>BP2/205</code> — specific RP device barcode → resolves to stock type</span>
+            <span><code>@si94884</code> or <code>94884</code> — EJ @si barcode or bare number</span>
+            <span><code>10934</code> — EJ internal item ID → direct lookup</span>
+            <span><code>1007969.00</code> — EJ item number → name search match</span>
+            <span><code>BP2</code> or <code>BP2/</code> — base barcode prefix → all matching stock types</span>
+            <span><code>ROE BP2</code> — partial name → wildcard search across all items</span>
+        </div>
+    </div>
     {% endif %}
 
 </div>
@@ -145,24 +194,24 @@
 
 {% block scripts %}
 <script>
-const placeholders = {
-    item_name: "Item name or wildcard, e.g. Camera*",
-    item_id:   "Numeric item ID, e.g. 1042",
-    barcode:   "RP barcode, e.g. BP2/205"
-};
+function setQuery(val) {
+    document.getElementById('queryInput').value = val;
+    showLoading();
+    document.getElementById('stockForm').submit();
+}
 
-function setScanType(type) {
-    document.getElementById('scan_type').value = type;
-    document.getElementById('queryInput').placeholder = placeholders[type];
-    document.querySelectorAll('.scan-tabs .btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+function showLoading() {
+    const q = document.getElementById('queryInput').value.trim();
+    if (!q) return;
+    document.getElementById('loadingQuery').textContent = `"${q}"`;
+    document.getElementById('loadingOverlay').classList.add('active');
 }
 
 function toggleRaw(btn) {
     const raw    = btn.nextElementSibling;
     const hidden = raw.style.display === 'none' || raw.style.display === '';
-    raw.style.display   = hidden ? 'block' : 'none';
-    btn.textContent     = hidden ? 'hide raw API response' : 'show raw API response';
+    raw.style.display = hidden ? 'block' : 'none';
+    btn.textContent   = hidden ? 'hide raw API response' : 'show raw API response';
 }
 </script>
 {% endblock %}

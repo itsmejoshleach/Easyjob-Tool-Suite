@@ -389,44 +389,79 @@ def stock_check():
             error = "EasyJob is not configured. Check your .env credentials."
         else:
             try:
-                # ## Search by RP barcode (e.g. BP2/205)
-                if scan_type == "barcode":
+                # ## Route query to the right lookup strategy
+                #
+                # Specific device barcode  →  BP2/205, @si94884, 94884
+                # EJ item number           →  1007969.00
+                # Plain integer            →  10934        (EJ internal item ID)
+                # Everything else          →  name search  (wraps in wildcards automatically)
+                #
+                # All routes resolve to stock-type level — never a specific device.
+
+                IS_SPECIFIC_BARCODE = re.match(r'^[A-Za-z0-9]+/\d+$', query)
+                IS_SI_BARCODE       = re.match(r'^@?si\d+$', query, re.IGNORECASE)
+                IS_BARE_SI          = re.match(r'^\d{5,6}$', query)
+                IS_EJ_NUMBER        = re.match(r'^\d+\.\d+$', query)
+                IS_EJ_ID            = re.match(r'^\d+$', query)
+
+                if IS_SPECIFIC_BARCODE or IS_SI_BARCODE:
+                    # Full device barcode — resolve to stock type via BarcodeSearch
                     device_info = ej.get_device_info(query)
                     if not device_info:
-                        error = f"No device found for barcode: {query}"
+                        error = f"No device found for barcode '{query}'."
                     else:
-                        # BarcodeSearch may return a list or single dict — unwrap either
                         device  = _unwrap(device_info)
                         item_id = (device.get("Additional") or {}).get("IdStockType") or device.get("IdStockType")
                         name    = device.get("Caption", query)
                         if not item_id:
-                            error = f"Found device '{name}' but could not resolve Item ID."
+                            error = f"Found device '{name}' but could not resolve stock type ID."
                         else:
                             avail       = ej.get_item_availability(item_id)
                             total_owned = _get_total_owned(item_id)
                             result      = _parse_avail(avail, item_id, name, total_owned)
                             if not result:
-                                error = f"No availability data for item ID {item_id}."
+                                error = f"No availability data for '{name}'."
 
-                # ## Search by numeric Item ID
-                elif scan_type == "item_id":
+                elif IS_EJ_ID and not IS_EJ_NUMBER:
+                    # Plain integer — try direct item ID first, fall back to @si barcode search.
+                    # Can't distinguish 10934 (item ID) from 94884 (@si number) by pattern alone.
                     item_details = _unwrap(ej.get_item_details(int(query)))
-                    name        = item_details.get("Caption", query) if item_details else query
-                    total_owned = _get_total_owned(int(query))
-                    avail       = ej.get_item_availability(int(query))
-                    result      = _parse_avail(avail, query, name, total_owned)
-                    if not result:
-                        error = f"No availability data for item ID {query}."
+                    if item_details and item_details.get("ID") or item_details and item_details.get("Id"):
+                        name         = item_details.get("Caption", query)
+                        total_owned  = _get_total_owned(int(query))
+                        avail        = ej.get_item_availability(int(query))
+                        result       = _parse_avail(avail, query, name, total_owned)
+                        if not result:
+                            error = f"No availability data for item ID {query}."
+                    else:
+                        # Not a valid item ID — try as bare @si number
+                        device_info = ej.get_device_info(f"@si{query}")
+                        if not device_info:
+                            error = f"Nothing found for '{query}'. Try a name, barcode, or EJ item number."
+                        else:
+                            device  = _unwrap(device_info)
+                            item_id = (device.get("Additional") or {}).get("IdStockType") or device.get("IdStockType")
+                            name    = device.get("Caption", query)
+                            if not item_id:
+                                error = f"Found device '{name}' but could not resolve stock type ID."
+                            else:
+                                avail       = ej.get_item_availability(item_id)
+                                total_owned = _get_total_owned(item_id)
+                                result      = _parse_avail(avail, item_id, name, total_owned)
+                                if not result:
+                                    error = f"No availability data for '{name}'."
 
-                # ## Search by item name — may return multiple items
-                elif scan_type == "item_name":
-                    items_found = ej.get_all_items(searchtext=query)
+                else:
+                    # Name, base barcode (BP2, BP2/), EJ number (1007969.00), or any text
+                    # Strip trailing slash, wrap in wildcards so partial names match
+                    search_term = f"*{query.rstrip('/')}*"
+                    items_found = ej.get_all_items(searchtext=search_term)
                     if not items_found:
                         error = f"No items found matching '{query}'."
                     else:
                         results = []
                         for item in items_found:
-                            item_id = item.get("Id")
+                            item_id = item.get("Id") or item.get("ID") or item.get("IdStockType")
                             name    = item.get("Caption", str(item_id))
                             if not item_id:
                                 continue
@@ -436,11 +471,11 @@ def stock_check():
                                 parsed      = _parse_avail(avail, item_id, name, total_owned)
                                 if parsed:
                                     results.append(parsed)
-                            except Exception:
-                                pass    # skip items that fail availability lookup
+                            except Exception as e:
+                                error = f"Error fetching availability for '{name}': {e}"
 
-                        if not results:
-                            error = f"Found items matching '{query}' but could not retrieve availability."
+                        if not results and not error:
+                            error = f"No items found matching '{query}'."
 
             except RuntimeError as e:
                 error = str(e)
@@ -459,7 +494,7 @@ def stock_check():
     )
 
 
-# -- Polling / Job Watcher --
+# -- Job Watching --
 
 def load_watchers():
     if not os.path.exists(WATCHERS_FILE):
@@ -478,7 +513,7 @@ def save_watchers(watchers):
 def polling():
     watchers = load_watchers()
     ej_ok    = ej_login()
-    return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="polling")
+    return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="job_watching")
 
 @app.route("/polling/add", methods=["POST"])
 def polling_add():

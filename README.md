@@ -24,7 +24,7 @@ It allows you to manage items, generate barcodes, create printable labels, and h
   - Creates **50mm × 25mm printable labels** with item name and barcode
   - Handles both standard items and custom barcodes
 
-- **Polling**
+- **Job Watching**
   - Placeholder page for job polling and notifications
 
 - **CSV-Based Storage**

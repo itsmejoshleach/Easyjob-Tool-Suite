@@ -1,13 +1,13 @@
-{% set total     = result.total %}
-{% set warehouse = result.warehouse %}
-{% set on_jobs   = result.on_jobs %}
-{% set workshop  = result.workshop %}
+{% set total     = item.total %}
+{% set warehouse = item.warehouse %}
+{% set on_jobs   = item.on_jobs %}
+{% set workshop  = item.workshop %}
 
 <div class="result-card">
     <h5 class="mb-3">
         <i class="fa-solid fa-box-open me-2 text-secondary"></i>
-        {{ result.name }}
-        <span class="text-secondary small ms-2" style="font-weight:400;">ID: {{ result.item_id }}</span>
+        {{ item.name }}
+        <span class="text-secondary small ms-2" style="font-weight:400;">ID: {{ item.item_id }}</span>
     </h5>
 
     <div class="d-flex flex-wrap gap-3 mb-3">
@@ -18,7 +18,6 @@
         </div>
 
         {% if workshop is not none %}
-        <!-- Full breakdown: separate on_jobs and workshop pills -->
         <div class="stat-pill pill-jobs">
             <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
             <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out on Jobs</span>
@@ -28,7 +27,6 @@
             <span class="lbl"><i class="fa-solid fa-screwdriver-wrench me-1"></i>Workshop</span>
         </div>
         {% else %}
-        <!-- Inventory-only: on_jobs includes workshop, can't split them -->
         <div class="stat-pill pill-jobs">
             <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
             <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out / Workshop</span>
@@ -42,7 +40,7 @@
 
     </div>
 
-    <!-- Stacked bar — only show if we have the full numbers -->
+    <!-- Stacked percentage bar -->
     {% if total and total | int > 0 and warehouse is not none and on_jobs is not none %}
     {% set w_pct = (warehouse | int / total | int * 100) | round(1) %}
     {% set j_pct = (on_jobs   | int / total | int * 100) | round(1) %}
@@ -65,13 +63,6 @@
     </div>
     {% endif %}
 
-    <!-- Raw API toggle -->
     <button class="raw-toggle" onclick="toggleRaw(this)">show raw API response</button>
-    <div class="raw-data">Avail response:
-{{ result.raw | tojson(indent=2) }}
-{% if result.sample_device %}
-
-Sample device record (first device — shows available status fields):
-{{ result.sample_device | tojson(indent=2) }}
-{% endif %}</div>
+    <div class="raw-data">{{ item.raw | tojson(indent=2) }}</div>
 </div>
