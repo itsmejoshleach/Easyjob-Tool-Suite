@@ -11,14 +11,13 @@
   ☐ Display changes in web UI
     Job Watch:
   ☐ Add job confirmation/unlock notifications
-  ☐ Add ability to "Mark as Read"
-  ☐ Show job status timeline
-  ☐ Add item availability watcher
+  ☐ Add ability to "Mark changes as Read"
+    item availability watcher:
   ☐ Track when items return from jobs
   ☐ Show next available date
     Calendar Watch:
   ☐ Change time & Date to a readable format
-  ☐ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title.
+  ☐ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title. Otherwise use `Caption` + `PostCaption`
 
 ### Stock Check Page
 ✔ Create new stock check page/tab @done(26-03-10 21:48)
@@ -31,14 +30,14 @@
 
 ### Item Search Enhancements
 ✔ Add "More Info" button to item cards @done(26-03-10 21:48)
-☐ Create item profile modal/popup
+✔ Create item profile modal/popup @done(26-03-10 23:39)
   ☐ Show associated/related items
   ☐ Display physical description
-  ☐ Show item image/photo
-  ☐ Add layman's terms description
+  ✔ Show item image/photo @done(26-03-10 23:39)
+  ✔ Add layman's terms description @done(26-03-10 23:39)
   ☐ List common use case scenarios
   ☐ Show similar/alternative items
-  ☐ Include usage instructions
+  ✔ Include usage instructions @done(26-03-10 23:39)
 
 ## Medium Priority Features
 
@@ -57,7 +56,7 @@
 ☐ Add bulk CSV import
 ☐ Add bulk CSV export
 ☐ Implement item categories/tags
-☐ Add item image upload
+✘ Add item image upload @cancelled(26-03-10 23:40)
 ☐ Support multiple barcode formats
 ☐ Add item duplication feature
 
@@ -78,10 +77,10 @@
 
 ### Performance & Quality
 ☐ Replace CSV with SQLite/PostgreSQL
-☐ Add pagination for large item lists
+✔ Add pagination for large item lists @done(26-03-10 23:40)
 ☐ Implement search result caching
-☐ Add loading indicators
-☐ Improve error messages
+✔ Add loading indicators @done(26-03-10 23:40)
+✔ Improve error messages @done(26-03-10 23:40)
 ☐ Add input validation
 ☐ Make Job watchers attached to the login
 ☐ Make Calender watchers attached to the login
@@ -89,7 +88,7 @@
 
 ### Advanced Features
 ☐ Item history/audit log
-☐ Advanced search filters
+☐ Advanced search filters (regex)
 ☐ Saved searches
 ☐ Export reports
 ☐ Item usage statistics
