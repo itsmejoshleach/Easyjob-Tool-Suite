@@ -58,18 +58,23 @@
     .profile-body { padding: 16px 24px 24px; }
 
     .profile-photo {
-        width: 100%; height: 180px;
+        width: 160px; min-width: 160px; height: 160px;
         border-radius: 10px; border: 1px dashed rgba(255,255,255,0.12);
-        margin-bottom: 20px;
         display: flex; align-items: center; justify-content: center;
         flex-direction: column; gap: 8px;
-        color: #495057; font-size: 0.8rem;
+        color: #495057; font-size: 0.75rem;
         background: rgba(255,255,255,0.02);
+        flex-shrink: 0;
     }
     .profile-photo img {
-        width: 100%; height: 100%; object-fit: cover; border-radius: 10px;
+        width: 100%; height: 100%; object-fit: contain; border-radius: 10px;
     }
-    .profile-photo i { font-size: 1.8rem; opacity: 0.3; }
+    .profile-photo i { font-size: 1.4rem; opacity: 0.3; }
+
+    .profile-top {
+        display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px;
+    }
+    .profile-top-text { flex: 1; min-width: 0; }
 
     .profile-section { margin-bottom: 20px; }
     .profile-section-title {
@@ -131,9 +136,9 @@
     </div>
 
     <!-- Search form -->
-    <form method="POST" action="/" class="row g-2 mb-4">
+    <form method="GET" action="/" class="row g-2 mb-4">
         <div class="col">
-            <input class="form-control form-control-lg" type="text" name="search"
+            <input class="form-control form-control-lg" type="text" name="q"
                    placeholder="Name, description, or barcode" value="{{ query }}">
         </div>
         <div class="col-auto">
@@ -161,6 +166,14 @@
                     <i class="fa-solid fa-circle-info me-1"></i> More Info
                 </button>
 
+                <!-- Edit -->
+                <button class="btn btn-sm btn-outline-secondary edit-item-btn"
+                        data-name="{{ item.name | e }}"
+                        data-description="{{ item.description | e }}"
+                        data-barcode="{{ item.barcode | e }}">
+                    <i class="fa-solid fa-pencil me-1"></i> Edit
+                </button>
+
                 {% if item.label %}
                 <button class="btn btn-sm btn-outline-primary"
                         onclick="printLabel('{{ url_for('static', filename=item.label) }}')">
@@ -177,14 +190,53 @@
             </div>
         </div>
 
-        {% if item.label %}
-        <img class="label mt-3" src="{{ url_for('static', filename=item.label) }}"
-             alt="Label for {{ item.name }}">
+        {% if item.label or item.photo_url %}
+        <div class="d-flex gap-3 mt-3 align-items-start">
+            {% if item.label %}
+            <img class="label" src="{{ url_for('static', filename=item.label) }}"
+                 alt="Label for {{ item.name }}">
+            {% endif %}
+            {% if item.photo_url %}
+            <img src="{{ item.photo_url | e }}"
+                 alt="Photo of {{ item.name }}"
+                 style="width:80px; height:80px; object-fit:contain; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); flex-shrink:0;"
+                 onerror="this.style.display='none'">
+            {% endif %}
+        </div>
         {% endif %}
     </div>
     {% else %}
     <p class="text-secondary">No items found.</p>
     {% endfor %}
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <span class="text-secondary small">
+            Showing {{ (page_num - 1) * page_size + 1 }}–{{ [page_num * page_size, total] | min }} of {{ total }} items
+        </span>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if page_num == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="/?q={{ query | urlencode }}&page={{ page_num - 1 }}">‹</a>
+                </li>
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == 1 or p == total_pages or (p >= page_num - 2 and p <= page_num + 2) %}
+                        <li class="page-item {% if p == page_num %}active{% endif %}">
+                            <a class="page-link" href="/?q={{ query | urlencode }}&page={{ p }}">{{ p }}</a>
+                        </li>
+                    {% elif p == page_num - 3 or p == page_num + 3 %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if page_num == total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="/?q={{ query | urlencode }}&page={{ page_num + 1 }}">›</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+
 </div>
 
 <!-- More Info modal -->
@@ -196,9 +248,15 @@
                 <h4 id="profileTitle">Loading…</h4>
                 <span class="category-badge" id="profileCategory"></span>
             </div>
-            <button class="profile-close" onclick="closeProfile()">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+            <div class="d-flex gap-2 align-items-center">
+                <button class="btn btn-sm btn-outline-secondary" id="profileEditBtn" style="display:none;"
+                        onclick="toggleProfileEdit()">
+                    <i class="fa-solid fa-pencil me-1"></i> Edit
+                </button>
+                <button class="profile-close" onclick="closeProfile()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
         </div>
 
         <div class="profile-body">
@@ -218,23 +276,29 @@
             <!-- Content shown after load -->
             <div id="profileContent" style="display:none;">
 
-                <!-- Photo -->
-                <div class="profile-photo" id="profilePhotoWrap">
-                    <img id="profilePhoto" src="" alt="" style="display:none;">
-                    <i class="fa-solid fa-image" id="profilePhotoFallback"></i>
-                    <span id="profilePhotoLabel">No photo added yet</span>
-                </div>
+                <!-- Top: photo left, description + how-to right -->
+                <div class="profile-top">
 
-                <!-- Description -->
-                <div class="profile-section">
-                    <div class="profile-section-title"><i class="fa-solid fa-circle-info me-1"></i>What it does</div>
-                    <p id="profileDescription"></p>
-                </div>
+                    <div class="profile-photo" id="profilePhotoWrap">
+                        <img id="profilePhoto" src="" alt="" style="display:none;">
+                        <i class="fa-solid fa-image" id="profilePhotoFallback"></i>
+                        <span id="profilePhotoLabel">No photo</span>
+                    </div>
 
-                <!-- How-to -->
-                <div class="profile-section" id="profileHowToSection">
-                    <div class="profile-section-title"><i class="fa-solid fa-list-check me-1"></i>Quick start</div>
-                    <ol class="how-to-list" id="profileHowTo"></ol>
+                    <div class="profile-top-text">
+                        <!-- Description -->
+                        <div class="profile-section" style="margin-bottom:14px;">
+                            <div class="profile-section-title"><i class="fa-solid fa-circle-info me-1"></i>What it does</div>
+                            <p id="profileDescription"></p>
+                        </div>
+
+                        <!-- How-to -->
+                        <div class="profile-section" id="profileHowToSection" style="margin-bottom:0;">
+                            <div class="profile-section-title"><i class="fa-solid fa-list-check me-1"></i>Quick start</div>
+                            <ol class="how-to-list" id="profileHowTo"></ol>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- Accessories -->
@@ -250,6 +314,73 @@
                 </div>
 
             </div>
+
+            <!-- Inline edit panel — hidden until Edit clicked -->
+            <div id="profileEditPanel" style="display:none; padding: 0 24px 24px;">
+                <hr class="border-secondary">
+                <div class="profile-section-title mb-3"><i class="fa-solid fa-pencil me-1"></i>Edit Profile</div>
+
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Photo URL</label>
+                    <input class="form-control form-control-sm" id="pePhotoUrl" placeholder="https://…">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Description</label>
+                    <textarea class="form-control form-control-sm" id="peDescription" rows="4"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Quick-start steps <span class="text-muted">(one per line)</span></label>
+                    <textarea class="form-control form-control-sm" id="peHowTo" rows="5"></textarea>
+                </div>
+
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm btn-secondary" onclick="toggleProfileEdit()">Cancel</button>
+                    <button class="btn btn-sm btn-primary" onclick="saveProfileEdit()">
+                        <i class="fa-solid fa-floppy-disk me-1"></i> Save
+                    </button>
+                </div>
+                <p id="peSaveStatus" class="text-secondary small mt-2 mb-0" style="display:none;"></p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Edit Item modal -->
+<div class="modal fade" id="editItemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('edit_item') }}" id="editItemForm">
+                <input type="hidden" name="original_name" id="editOriginalName">
+
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-pencil me-2"></i>Edit Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Item Name</label>
+                        <input class="form-control" name="name" id="editName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description / Alternate Names</label>
+                        <textarea class="form-control" name="description" id="editDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Barcode</label>
+                        <input class="form-control" name="barcode" id="editBarcode" required>
+                        <small class="text-muted">Changing the barcode will regenerate the label.</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fa-solid fa-floppy-disk me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -290,14 +421,28 @@
 {% block scripts %}
 <script>
 document.addEventListener('click', e => {
-    const btn = e.target.closest('.more-info-btn');
-    if (btn) openProfile(btn.dataset.name, btn.dataset.barcode);
+    const moreInfo = e.target.closest('.more-info-btn');
+    if (moreInfo) openProfile(moreInfo.dataset.name, moreInfo.dataset.barcode);
+
+    const edit = e.target.closest('.edit-item-btn');
+    if (edit) {
+        document.getElementById('editOriginalName').value  = edit.dataset.name;
+        document.getElementById('editName').value          = edit.dataset.name;
+        document.getElementById('editDescription').value   = edit.dataset.description;
+        document.getElementById('editBarcode').value       = edit.dataset.barcode;
+        new bootstrap.Modal(document.getElementById('editItemModal')).show();
+    }
 });
 
 function openProfile(name, barcode) {
     // Reset state
     document.getElementById('profileTitle').textContent    = name;
     document.getElementById('profileCategory').textContent = '';
+    document.getElementById('profileEditBtn').style.display  = 'none';
+    document.getElementById('profileEditPanel').style.display = 'none';
+    document.getElementById('profileEditBtn').innerHTML       = '<i class="fa-solid fa-pencil me-1"></i> Edit';
+    document.getElementById('profileModal').dataset.name    = name;
+    document.getElementById('profileModal').dataset.barcode = barcode;
     document.getElementById('profileSkeleton').style.display  = 'block';
     document.getElementById('profileContent').style.display   = 'none';
     document.getElementById('profileBackdrop').classList.add('active');
@@ -311,30 +456,59 @@ function openProfile(name, barcode) {
 }
 
 function renderProfile(data) {
-    document.getElementById('profileSkeleton').style.display = 'none';
-    document.getElementById('profileContent').style.display  = 'block';
+    document.getElementById('profileSkeleton').style.display  = 'none';
+    document.getElementById('profileContent').style.display   = 'block';
+    document.getElementById('profileEditPanel').style.display = 'none';
+    document.getElementById('profileEditBtn').innerHTML        = '<i class="fa-solid fa-pencil me-1"></i> Edit';
 
     if (data.error) {
         document.getElementById('profileDescription').textContent = `Error: ${data.error}`;
         return;
     }
 
+    // Declare ai early — everything below depends on it
+    const ai    = data.ai_content || {};
+    const modal = document.getElementById('profileModal');
+
+    // Store raw values on modal so edit panel can read them back cleanly
+    modal.dataset.description = ai.description || '';
+    modal.dataset.photoUrl    = ai.photo_url   || '';
+    modal.dataset.howTo       = JSON.stringify(ai.how_to || []);
+
+    // Show edit button
+    document.getElementById('profileEditBtn').style.display = 'block';
+
     // Category badge
-    const cat = data.ej_details?.Category || '';
+    const cat   = data.ej_details?.Category || '';
     const catEl = document.getElementById('profileCategory');
-    catEl.textContent = cat;
+    catEl.textContent   = cat;
     catEl.style.display = cat ? 'inline-block' : 'none';
 
-    // Photo placeholder
-    const imgEl       = document.getElementById('profilePhoto');
-    const fallbackEl  = document.getElementById('profilePhotoFallback');
-    imgEl.style.display      = 'none';
-    fallbackEl.style.display = 'flex';
+    // Photo
+    const imgEl      = document.getElementById('profilePhoto');
+    const fallbackEl = document.getElementById('profilePhotoFallback');
+    const labelEl    = document.getElementById('profilePhotoLabel');
+    if (ai.photo_url) {
+        imgEl.src = ai.photo_url;
+        imgEl.style.display      = 'block';
+        fallbackEl.style.display = 'none';
+        labelEl.style.display    = 'none';
+        imgEl.onerror = () => {
+            imgEl.style.display      = 'none';
+            fallbackEl.style.display = 'flex';
+            labelEl.style.display    = 'block';
+        };
+    } else {
+        imgEl.style.display      = 'none';
+        fallbackEl.style.display = 'flex';
+        labelEl.style.display    = 'block';
+    }
 
-    // AI content
-    const ai = data.ai_content || {};
-    document.getElementById('profileDescription').textContent = ai.description || 'No description available.';
+    // Description — show placeholder in UI but don't store it
+    document.getElementById('profileDescription').textContent =
+        ai.description || 'No description yet. Click Edit to add one.';
 
+    // How-to steps
     const howToEl = document.getElementById('profileHowTo');
     howToEl.innerHTML = '';
     const steps = ai.how_to || [];
@@ -377,6 +551,90 @@ function renderProfile(data) {
     } else {
         ejSec.style.display = 'none';
     }
+}
+
+function toggleProfileEdit() {
+    const view  = document.getElementById('profileContent');
+    const edit  = document.getElementById('profileEditPanel');
+    const btn   = document.getElementById('profileEditBtn');
+    const modal = document.getElementById('profileModal');
+    const open  = edit.style.display === 'none';
+
+    if (open) {
+        // Populate from stored dataset values — never from visible text (avoids placeholder bleed-through)
+        document.getElementById('pePhotoUrl').value    = modal.dataset.photoUrl    || '';
+        document.getElementById('peDescription').value = modal.dataset.description || '';
+        const steps = JSON.parse(modal.dataset.howTo || '[]');
+        document.getElementById('peHowTo').value = steps.join('\n');
+        document.getElementById('peSaveStatus').style.display = 'none';
+    }
+
+    view.style.display = open ? 'none' : 'block';
+    edit.style.display = open ? 'block' : 'none';
+    btn.innerHTML      = open
+        ? '<i class="fa-solid fa-eye me-1"></i> View'
+        : '<i class="fa-solid fa-pencil me-1"></i> Edit';
+}
+
+function saveProfileEdit() {
+    const modal       = document.getElementById('profileModal');
+    const name        = modal.dataset.name;
+    const description = document.getElementById('peDescription').value.trim();
+    const how_to      = document.getElementById('peHowTo').value
+                            .split('\n').map(s => s.trim()).filter(Boolean);
+    const photo_url   = document.getElementById('pePhotoUrl').value.trim();
+
+    const statusEl = document.getElementById('peSaveStatus');
+    statusEl.textContent    = 'Saving…';
+    statusEl.style.display  = 'block';
+    statusEl.style.color    = '#6c757d';
+
+    fetch('/save_profile', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ name, description, how_to, photo_url })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Keep dataset in sync with what was just saved
+            modal.dataset.description = description;
+            modal.dataset.photoUrl    = photo_url;
+            modal.dataset.howTo       = JSON.stringify(how_to);
+
+            // Update displayed content in place
+            document.getElementById('profileDescription').textContent = description || 'No description yet. Click Edit to add one.';
+            const howToEl = document.getElementById('profileHowTo');
+            howToEl.innerHTML = '';
+            if (how_to.length) {
+                how_to.forEach(step => {
+                    const li = document.createElement('li');
+                    li.textContent = step;
+                    howToEl.appendChild(li);
+                });
+                document.getElementById('profileHowToSection').style.display = 'block';
+            } else {
+                document.getElementById('profileHowToSection').style.display = 'none';
+            }
+            if (photo_url) {
+                const img = document.getElementById('profilePhoto');
+                img.src = photo_url;
+                img.style.display = 'block';
+                document.getElementById('profilePhotoFallback').style.display = 'none';
+                document.getElementById('profilePhotoLabel').style.display    = 'none';
+            }
+            statusEl.textContent = '✓ Saved';
+            statusEl.style.color = '#20c997';
+            setTimeout(() => toggleProfileEdit(), 800);
+        } else {
+            statusEl.textContent = `Error: ${data.error}`;
+            statusEl.style.color = '#dc3545';
+        }
+    })
+    .catch(err => {
+        statusEl.textContent = `Error: ${err}`;
+        statusEl.style.color = '#dc3545';
+    });
 }
 
 function closeProfile() {

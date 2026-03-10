@@ -48,8 +48,18 @@
             </a>
         </nav>
 
-        <div class="mt-auto text-secondary small">
-            Made for internal CT (Creative Technology Group) Intranet usage
+        <div class="mt-auto">
+            <!-- EJ Sync -->
+            <div class="mb-3">
+                <button class="btn btn-sm btn-outline-secondary w-100" id="syncBtn" onclick="runSync()">
+                    <i class="fa-solid fa-rotate me-1"></i> Sync from EasyJob
+                </button>
+                <div id="syncStatus" class="text-secondary mt-1" style="font-size:0.7rem; text-align:center;"></div>
+            </div>
+
+            <div class="text-secondary small">
+                Made for internal CT (Creative Technology Group) Intranet usage
+            </div>
         </div>
     </aside>
 
@@ -69,10 +79,77 @@
         (<a href="mailto:jleach@ctlondon.com">jleach@ctlondon.com</a> /
         <a href="mailto:josh@itsmejoshleach.co.uk">josh@itsmejoshleach.co.uk</a>)
     </p>
-    <p class="mb-1">© itsmejoshleach 2025 - 2026</p>
+    <p class="mb-1">&copy; itsmejoshleach 2025 - 2026</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+let _syncPoll = null;
+
+// On page load — check if a sync is already running or show last sync time
+fetch('/sync_status')
+    .then(r => r.json())
+    .then(d => {
+        if (d.running) {
+            setSyncRunning();
+            startPolling();
+        } else if (d.last_sync) {
+            showSyncDone(d);
+        }
+    })
+    .catch(() => {});
+
+function runSync() {
+    fetch('/sync_items', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.already_running) return; // already going, ignore
+            setSyncRunning();
+            startPolling();
+        })
+        .catch(err => {
+            document.getElementById('syncStatus').textContent = 'Error: ' + err;
+        });
+}
+
+function setSyncRunning() {
+    const btn = document.getElementById('syncBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin me-1"></i> Syncing\u2026';
+}
+
+function startPolling() {
+    if (_syncPoll) return;
+    _syncPoll = setInterval(() => {
+        fetch('/sync_status')
+            .then(r => r.json())
+            .then(d => {
+                // Show live progress
+                if (d.total) {
+                    document.getElementById('syncStatus').textContent =
+                        d.processed + ' / ' + d.total + ' processed\u2026';
+                }
+                if (!d.running) {
+                    clearInterval(_syncPoll);
+                    _syncPoll = null;
+                    const btn = document.getElementById('syncBtn');
+                    btn.disabled  = false;
+                    btn.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Sync from EasyJob';
+                    showSyncDone(d);
+                }
+            })
+            .catch(() => {});
+    }, 2000); // poll every 2 seconds
+}
+
+function showSyncDone(d) {
+    const status = document.getElementById('syncStatus');
+    const errors = (d.errors && d.errors.length) ? ' \u00b7 ' + d.errors.length + ' error(s)' : '';
+    status.innerHTML = '<span style="color:#20c997;">+' + d.added + ' added</span>, ' + d.skipped + ' skipped' + errors + '<br>' + d.last_sync;
+}
+</script>
+
 {% block scripts %}{% endblock %}
 
 </body>

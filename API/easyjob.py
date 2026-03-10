@@ -129,12 +129,17 @@ def get_items_in_job(job_id: str):
     return _get(f"/api.json/Items/BillOfItems/?id={job_id}")
 
 def get_all_items(searchtext: str = ""):
-    # Returns full item list, optionally filtered by search text
-    params = {}
+    # Returns full item list, optionally filtered by search text.
+    # Uses inline URL to avoid requests double-encoding the * wildcard.
     if searchtext:
-        from urllib.parse import quote
-        params["searchtext"] = quote(searchtext, safe="")
-    return _get("/api.json/Items/List/", params=params)
+        encoded = quote(searchtext, safe="*")
+        return _get(f"/api.json/Items/List/?searchtext={encoded}")
+    return _get("/api.json/Items/List/")
+
+def get_all_items_full():
+    # Returns complete EJ item catalogue with all fields needed for sync.
+    # type=view includes non-barcoded items; style=List gives flat list.
+    return _get("/api.json/Items/List/?searchtext=*&type=view&style=List&IdUserFilter=0")
 
 def get_item_details(item_id: int):
     # Returns detailed info for a single item, including RentalInventory (total active owned count)
@@ -173,7 +178,10 @@ def get_device_info(device_barcode: str, debug: bool = False):
         _log(f"Response: {result}")
     return result
 
-def get_device_list(item_id, search_text: str = ""):
+def get_calendar(start_date: str, days: int = 35):
+    # Fetch calendar entries from EJ dashboard.
+    # start_date: "YYYY-MM-DD", days: how many days ahead to fetch.
+    return _get(f"/api.json/dashboard/calendar/?days={days}&startdate={start_date}")
     # Returns all individual devices for a given item type (used for stock counts)
     return _get(f"/api.json/Items/DeviceList/?id={item_id}&searchtext={search_text}")
 

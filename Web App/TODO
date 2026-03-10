@@ -9,11 +9,16 @@
   ✔ Detect job status changes @done(26-03-10 21:48)
   ☐ Send notifications on changes
   ☐ Display changes in web UI
-☐ Add job confirmation/unlock notifications
-☐ Show job status timeline
-☐ Add item availability watcher
+    Job Watch:
+  ☐ Add job confirmation/unlock notifications
+  ☐ Add ability to "Mark as Read"
+  ☐ Show job status timeline
+  ☐ Add item availability watcher
   ☐ Track when items return from jobs
   ☐ Show next available date
+    Calendar Watch:
+  ☐ Change time & Date to a readable format
+  ☐ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title.
 
 ### Stock Check Page
 ✔ Create new stock check page/tab @done(26-03-10 21:48)
@@ -78,6 +83,9 @@
 ☐ Add loading indicators
 ☐ Improve error messages
 ☐ Add input validation
+☐ Make Job watchers attached to the login
+☐ Make Calender watchers attached to the login
+☐ Make custom barcodes attached to the login
 
 ### Advanced Features
 ☐ Item history/audit log

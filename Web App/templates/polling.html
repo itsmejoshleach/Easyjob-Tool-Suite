@@ -1,128 +1,140 @@
 {% extends "base_layout.html" %}
-{% block title %}Polling{% endblock %}
+{% block title %}Job Watching{% endblock %}
 
 {% block content %}
-<div class="glass-card p-4 text-white">
 
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-3">
-            <h2 class="mb-0"><i class="fa-solid fa-chart-line me-2"></i>Job Watchers</h2>
-            {% if not ej_ok %}
-            <span class="badge bg-warning text-dark">
-                <i class="fa-solid fa-triangle-exclamation me-1"></i> EasyJob not configured
-            </span>
-            {% endif %}
+<!-- ===================== CALENDAR WATCH ===================== -->
+<div class="glass-card p-4 text-white mb-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0"><i class="fa-solid fa-calendar-days me-2 text-primary"></i> Calendar Watch</h2>
+            <p class="text-secondary mb-0 mt-1" style="font-size:0.82rem;">
+                Watches the next 35 days of your EasyJob calendar. Notifies when new entries appear.
+            </p>
         </div>
-
-        <div class="d-flex gap-2">
-            <!-- Manual refresh -->
-            <form method="POST" action="{{ url_for('polling_refresh') }}">
-                <button class="btn btn-sm btn-outline-secondary" {% if not ej_ok %}disabled{% endif %}>
-                    <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh Now
-                </button>
-            </form>
-            <!-- Add watcher -->
-            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addWatcherModal"
-                    {% if not ej_ok %}disabled{% endif %}>
-                <i class="fa-solid fa-plus me-1"></i> Watch Job
+        <div class="d-flex gap-2 align-items-center">
+            <span id="calLastChecked" class="text-secondary" style="font-size:0.78rem;"></span>
+            <button class="btn btn-sm btn-outline-primary" onclick="refreshCalendar()">
+                <i class="fa-solid fa-rotate me-1"></i> Check Now
             </button>
         </div>
     </div>
 
-    <p class="text-secondary mb-4 small">
-        Watches EasyJob jobs for status changes (confirmed, unlocked, etc.).
-        Polls automatically every 30 minutes. Use <em>Refresh Now</em> to check immediately.
-    </p>
-
-    <!-- WATCHER LIST -->
-    {% if watchers %}
-    <div class="row g-3">
-        {% for w in watchers %}
-        <div class="col-md-6">
-            <div class="item-card position-relative
-                        {% if w.has_change %} border border-warning {% endif %}"
-                 style="{% if w.has_change %}border-color: rgba(255,193,7,0.6) !important;{% endif %}">
-
-                <!-- Change badge -->
-                {% if w.has_change %}
-                <span class="badge bg-warning text-dark position-absolute top-0 end-0 m-2">
-                    <i class="fa-solid fa-bell me-1"></i> Changed
-                </span>
-                {% endif %}
-
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="mb-0">{{ w.label }}</h6>
-                        <small class="text-secondary">Job No: <code>{{ w.job_no }}</code></small>
-                    </div>
-                </div>
-
-                <!-- Status row -->
-                <div class="d-flex gap-3 mb-2 flex-wrap">
-                    <div>
-                        <span class="text-secondary small">Status </span>
-                        {% if w.last_status %}
-                        <span class="badge bg-secondary">{{ w.last_status }}</span>
-                        {% else %}
-                        <span class="text-secondary small">—</span>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <span class="text-secondary small">Locked </span>
-                        {% if w.last_locked %}
-                        <span class="badge bg-danger"><i class="fa-solid fa-lock me-1"></i>Yes</span>
-                        {% else %}
-                        <span class="badge bg-success"><i class="fa-solid fa-lock-open me-1"></i>No</span>
-                        {% endif %}
-                    </div>
-                </div>
-
-                {% if w.last_changed %}
-                <p class="text-secondary small mb-2">
-                    <i class="fa-solid fa-clock me-1"></i> Last changed: {{ w.last_changed }}
-                </p>
-                {% endif %}
-
-                {% if w.error %}
-                <div class="alert alert-danger py-1 px-2 small mb-2">
-                    <i class="fa-solid fa-circle-xmark me-1"></i>{{ w.error }}
-                </div>
-                {% endif %}
-
-                <p class="text-secondary small mb-3">
-                    <i class="fa-solid fa-calendar-plus me-1"></i> Watching since {{ w.added }}
-                </p>
-
-                <!-- Actions -->
-                <div class="d-flex gap-2 flex-wrap">
-                    {% if w.has_change %}
-                    <form method="POST" action="{{ url_for('polling_clear_flag') }}">
-                        <input type="hidden" name="job_no" value="{{ w.job_no }}">
-                        <button class="btn btn-sm btn-outline-warning">
-                            <i class="fa-solid fa-check me-1"></i> Mark as Seen
-                        </button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('polling_remove') }}">
-                        <input type="hidden" name="job_no" value="{{ w.job_no }}">
-                        <button class="btn btn-sm btn-outline-danger">
-                            <i class="fa-solid fa-trash me-1"></i> Remove
-                        </button>
-                    </form>
-                </div>
-
-            </div>
+    <!-- New entries notification area -->
+    <div id="calNewSection" style="display:none;" class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-success small"><i class="fa-solid fa-bell me-1"></i> New entries since last check</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="dismissAll()">
+                Dismiss All
+            </button>
         </div>
-        {% endfor %}
+        <div id="calNewList"></div>
     </div>
 
-    {% else %}
-    <div class="text-center text-secondary py-5">
-        <i class="fa-solid fa-satellite-dish fa-3x mb-3" style="opacity:0.3;"></i>
-        <p class="mb-1">No jobs being watched yet.</p>
-        <p class="small">Click <strong>Watch Job</strong> to start monitoring a job for changes.</p>
+    <!-- All known entries -->
+    <div>
+        <p class="text-secondary small mb-2" id="calTotalLabel"></p>
+        <div id="calAllEntries" class="row g-2"></div>
+    </div>
+
+    <div id="calError" class="text-danger small mt-2" style="display:none;"></div>
+
+</div>
+
+
+<!-- ===================== JOB WATCHERS ===================== -->
+<div class="glass-card p-4 text-white">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0"><i class="fa-solid fa-eye me-2 text-warning"></i> Job Watchers</h2>
+            <p class="text-secondary mb-0 mt-1" style="font-size:0.82rem;">
+                Watch specific jobs for status or item changes.
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <form method="POST" action="{{ url_for('polling_refresh') }}">
+                <button class="btn btn-sm btn-outline-secondary">
+                    <i class="fa-solid fa-rotate me-1"></i> Refresh All
+                </button>
+            </form>
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addWatcherModal">
+                <i class="fa-solid fa-plus me-1"></i> Add Job
+            </button>
+        </div>
+    </div>
+
+    {% if not ej_ok %}
+    <div class="alert alert-warning">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+        EasyJob not connected — check your <code>.env</code> credentials.
     </div>
     {% endif %}
+
+    {% if not watchers %}
+    <p class="text-secondary">No jobs being watched. Add one above.</p>
+    {% endif %}
+
+    {% for w in watchers %}
+    <div class="item-card {% if w.has_change %}border border-warning{% endif %}">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h5 class="mb-1">
+                    {{ w.label }}
+                    {% if w.has_change %}
+                    <span class="badge bg-warning text-dark ms-2">Changed</span>
+                    {% endif %}
+                </h5>
+                <p class="mb-1 text-secondary small">Job No: {{ w.job_no }}</p>
+                <p class="mb-1 small">
+                    Status: <strong>{{ w.last_status or "Unknown" }}</strong>
+                    {% if w.last_locked %}<span class="badge bg-secondary ms-1">Locked</span>{% endif %}
+                </p>
+                {% if w.last_changed %}
+                <p class="mb-0 text-warning small">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i> Changed {{ w.last_changed }}
+                </p>
+                {% endif %}
+                {% if w.error %}
+                <p class="mb-0 text-danger small"><i class="fa-solid fa-circle-xmark me-1"></i> {{ w.error }}</p>
+                {% endif %}
+            </div>
+
+            <div class="d-flex gap-2">
+                {% if w.has_change %}
+                <form method="POST" action="{{ url_for('polling_clear_flag') }}">
+                    <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                    <button class="btn btn-sm btn-outline-warning">
+                        <i class="fa-solid fa-check me-1"></i> Mark Seen
+                    </button>
+                </form>
+                {% endif %}
+                <form method="POST" action="{{ url_for('polling_remove') }}">
+                    <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                    <button class="btn btn-sm btn-outline-danger">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if w.last_items %}
+        <div class="mt-2">
+            <p class="text-secondary small mb-1">Items on job:</p>
+            <div class="row g-1">
+                {% for iid, itm in w.last_items.items() %}
+                <div class="col-auto">
+                    <span class="badge" style="background:rgba(255,255,255,0.08); color:#ccc; font-weight:400;">
+                        {{ itm.name }} &times; {{ itm.qty }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
 
 </div>
 
@@ -132,29 +144,149 @@
         <div class="modal-content">
             <form method="POST" action="{{ url_for('polling_add') }}">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Watch a Job</h5>
+                    <h5 class="modal-title">Watch a Job</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">CT Job Number</label>
+                        <label class="form-label">Job Number</label>
                         <input class="form-control" name="job_no" placeholder="e.g. 3148.03" required>
-                        <div class="form-text">The EasyJob / CT job reference number.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Label <span class="text-secondary">(optional)</span></label>
-                        <input class="form-control" name="label" placeholder="e.g. Glastonbury Main Stage">
-                        <div class="form-text">A friendly name so you remember which job this is.</div>
+                        <input class="form-control" name="label" placeholder="Friendly name">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-primary">
-                        <i class="fa-solid fa-satellite-dish me-1"></i> Start Watching
-                    </button>
+                    <button class="btn btn-primary">Add Watcher</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+// ── Calendar Watch ──────────────────────────────────────────
+
+function refreshCalendar() {
+    const btn = event.currentTarget;
+    btn.disabled  = true;
+    btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin me-1"></i> Checking…';
+
+    fetch('/calendar_watch/refresh', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => {
+            // Poll until done (refresh is instant since it's background — just re-fetch status)
+            setTimeout(() => {
+                loadCalendarStatus();
+                btn.disabled  = false;
+                btn.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Check Now';
+            }, 1500);
+        })
+        .catch(() => {
+            btn.disabled  = false;
+            btn.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Check Now';
+        });
+}
+
+function loadCalendarStatus() {
+    fetch('/calendar_watch/status')
+        .then(r => r.json())
+        .then(renderCalendar)
+        .catch(() => {});
+}
+
+function renderCalendar(d) {
+    // Last checked
+    const checkedEl = document.getElementById('calLastChecked');
+    checkedEl.textContent = d.last_checked ? 'Last checked: ' + d.last_checked : '';
+
+    // Errors
+    const errEl = document.getElementById('calError');
+    if (d.errors && d.errors.length) {
+        errEl.style.display = '';
+        errEl.textContent   = d.errors.join(', ');
+    } else {
+        errEl.style.display = 'none';
+    }
+
+    // New entries notification
+    const newSection = document.getElementById('calNewSection');
+    const newList    = document.getElementById('calNewList');
+    const newEntries = d.new_entries || [];
+
+    if (newEntries.length) {
+        newSection.style.display = '';
+        newList.innerHTML = newEntries.map(e => `
+            <div class="d-flex justify-content-between align-items-center mb-1 p-2"
+                 style="background:rgba(25,200,120,0.08); border-radius:8px; border:1px solid rgba(25,200,120,0.2);">
+                <div>
+                    <strong style="color:#20c997;">${escHtml(e.caption)}</strong>
+                    <span class="text-secondary ms-2 small">${escHtml(e.start)}${e.end && e.end !== e.start ? ' → ' + escHtml(e.end) : ''}</span>
+                    ${e.type ? '<span class="badge ms-2" style="background:rgba(255,255,255,0.1);color:#aaa;font-weight:400;">'+escHtml(e.type)+'</span>' : ''}
+                </div>
+                <button class="btn btn-sm btn-outline-secondary ms-3" onclick="dismissEntry('${escHtml(e.id)}')">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        `).join('');
+    } else {
+        newSection.style.display = 'none';
+    }
+
+    // All known entries
+    const entries   = Object.values(d.entries || {});
+    const totalLabel = document.getElementById('calTotalLabel');
+    const allEl      = document.getElementById('calAllEntries');
+
+    totalLabel.textContent = entries.length
+        ? entries.length + ' entries tracked in the next 35 days'
+        : 'No entries tracked yet — click Check Now to fetch.';
+
+    // Sort by start date
+    entries.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+    allEl.innerHTML = entries.map(e => `
+        <div class="col-md-6 col-lg-4">
+            <div class="p-2" style="background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem;">
+                <div class="text-white fw-semibold">${escHtml(e.caption)}</div>
+                <div class="text-secondary">${escHtml(e.start)}${e.end && e.end !== e.start ? ' → ' + escHtml(e.end) : ''}</div>
+                ${e.type ? '<div><span class="badge" style="background:rgba(255,255,255,0.08);color:#aaa;font-weight:400;font-size:0.72rem;">'+escHtml(e.type)+'</span></div>' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function dismissEntry(id) {
+    const fd = new FormData();
+    fd.append('entry_id', id);
+    fetch('/calendar_watch/dismiss', { method: 'POST', body: fd })
+        .then(() => loadCalendarStatus())
+        .catch(() => {});
+}
+
+function dismissAll() {
+    fetch('/calendar_watch/dismiss_all', { method: 'POST' })
+        .then(() => loadCalendarStatus())
+        .catch(() => {});
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// Load on page open
+loadCalendarStatus();
+
+</script>
 {% endblock %}
