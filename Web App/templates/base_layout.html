@@ -40,7 +40,7 @@
             <a class="nav-link {% if page=='stock' %}active{% endif %}" href="{{ url_for('stock_check') }}">
                 <i class="fa-solid fa-warehouse me-2"></i> Stock Check
             </a>
-            <a class="nav-link {% if page=='polling' %}active{% endif %}" href="{{ url_for('polling') }}">
+            <a class="nav-link {% if page=='job_watching' %}active{% endif %}" href="{{ url_for('polling') }}">
                 <i class="fa-solid fa-eye me-2"></i> Job Watching
             </a>
             <a class="nav-link {% if page=='custom' %}active{% endif %}" href="{{ url_for('custom_barcodes') }}">
@@ -66,5 +66,14 @@
     <hr class="border-secondary">
     <p class="mb-1">
         Any questions, please get in touch:
-        (<a href="/cdn-cgi/l/email-protection#e68c8a8387858ea685928a8988828988c885898b"><span class="__cf_email__" data-cfemail="7e14121b1f1d163e1d0a1211101a1110501d1113">[email&#160;protected]</span></a> /
-        <a href="/cdn-cgi/l/email-protection#670d08140f270e13140a020d08140f0b0206040f49040849120c"><span class="__cf_email__" data-cfemail="acc6c3dfc4ecc5d8dfc1c9c6c3dfc4c0c
+        (<a href="mailto:jleach@ctlondon.com">jleach@ctlondon.com</a> /
+        <a href="mailto:josh@itsmejoshleach.co.uk">josh@itsmejoshleach.co.uk</a>)
+    </p>
+    <p class="mb-1">© itsmejoshleach 2025 - 2026</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

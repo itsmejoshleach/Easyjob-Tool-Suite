@@ -6,7 +6,7 @@ import json
 import requests
 import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 from PIL import Image, ImageDraw, ImageFont
 
 # Add parent directory to path to import API module
@@ -186,6 +186,84 @@ def index():
     query = request.form.get("search", "").strip() if request.method == "POST" else ""
     items = load_items(query)
     return render_template("index.html", items=items, query=query, page="items")
+
+
+@app.route("/item_profile", methods=["GET"])
+def item_profile():
+    # Returns JSON profile for the More Info modal.
+    # Resolves item name → EJ item ID → details + accessories, then generates
+    # AI description and how-to via Claude API.
+    item_name = request.args.get("name", "").strip()
+    barcode   = request.args.get("barcode", "").strip()
+    if not item_name:
+        return jsonify({"error": "No item name provided"}), 400
+
+    profile = {
+        "name":        item_name,
+        "ej_details":  None,
+        "accessories": [],
+        "ai_content":  None,
+        "image_query": item_name,
+    }
+
+    # ## Resolve EJ details via barcode or name search
+    ej_ok = ej_login()
+    if ej_ok:
+        try:
+            # Try barcode first (faster, exact)
+            if barcode:
+                device = _unwrap(ej.get_device_info(barcode))
+                if device:
+                    item_id = (device.get("Additional") or {}).get("IdStockType") or device.get("IdStockType")
+                    if item_id:
+                        details = _unwrap(ej.get_item_details(int(item_id)))
+                        profile["ej_details"] = details
+            # Fallback: name search
+            if not profile["ej_details"]:
+                found = ej.get_all_items(searchtext=f"*{item_name}*")
+                if found:
+                    item_id = found[0].get("Id") or found[0].get("ID")
+                    if item_id:
+                        details = _unwrap(ej.get_item_details(int(item_id)))
+                        profile["ej_details"] = details
+        except Exception:
+            pass
+
+        # ## Fetch accessories
+        if profile["ej_details"]:
+            try:
+                raw_id = profile["ej_details"].get("ID") or profile["ej_details"].get("Id") or profile["ej_details"].get("IdStockType")
+                if raw_id:
+                    acc = ej.get_item_accessories(int(raw_id))
+                    if isinstance(acc, list):
+                        profile["accessories"] = [
+                            {"name": a.get("Caption", ""), "number": a.get("Number", "")}
+                            for a in acc if a.get("Caption")
+                        ]
+                    else:
+                        profile["accessories_debug"] = f"Unexpected response type: {type(acc).__name__} — {str(acc)[:200]}"
+                else:
+                    profile["accessories_debug"] = f"Could not find item ID in ej_details keys: {list(profile['ej_details'].keys())}"
+            except Exception as e:
+                profile["accessories_debug"] = f"Exception: {e}"
+
+    # ## Build context string for Claude
+    details  = profile["ej_details"] or {}
+    comment  = details.get("Comment", "")
+
+    # ## AI content — placeholder until manually filled in
+    # Description uses EJ comment if available, otherwise a generic placeholder
+    description = comment.strip() if comment.strip() else "No description added yet. Edit this item to add one."
+
+    profile["ai_content"] = {
+        "description": description,
+        "how_to": [
+            "Quick start guide not yet written for this item.",
+            "Edit this profile to add setup steps.",
+        ]
+    }
+
+    return jsonify(profile)
 
 @app.route("/add", methods=["POST"])
 def add_item():

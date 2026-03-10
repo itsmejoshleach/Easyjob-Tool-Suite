@@ -1,6 +1,126 @@
 {% extends "base_layout.html" %}
 {% block title %}Item Search{% endblock %}
 
+{% block head %}
+<style>
+    /* More Info modal */
+    .profile-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(8,10,14,0.82);
+        backdrop-filter: blur(6px);
+        z-index: 9000;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+    .profile-modal-backdrop.active { display: flex; }
+
+    .profile-modal {
+        background: #0f1115;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 14px;
+        width: 100%;
+        max-width: 720px;
+        max-height: 88vh;
+        overflow-y: auto;
+        box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+        animation: modalIn 0.2s ease;
+    }
+    @keyframes modalIn {
+        from { opacity: 0; transform: translateY(16px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+
+    .profile-header {
+        padding: 20px 24px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .profile-header h4 { margin: 0; font-size: 1.1rem; color: #fff; line-height: 1.3; }
+    .profile-header .category-badge {
+        font-size: 0.7rem; color: #6c757d;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 20px; padding: 3px 10px;
+        white-space: nowrap; margin-top: 3px;
+    }
+    .profile-close {
+        background: none; border: none; color: #6c757d;
+        font-size: 1.3rem; cursor: pointer; padding: 0; flex-shrink: 0;
+        transition: color 0.15s;
+    }
+    .profile-close:hover { color: #fff; }
+
+    .profile-body { padding: 16px 24px 24px; }
+
+    .profile-photo {
+        width: 100%; height: 180px;
+        border-radius: 10px; border: 1px dashed rgba(255,255,255,0.12);
+        margin-bottom: 20px;
+        display: flex; align-items: center; justify-content: center;
+        flex-direction: column; gap: 8px;
+        color: #495057; font-size: 0.8rem;
+        background: rgba(255,255,255,0.02);
+    }
+    .profile-photo img {
+        width: 100%; height: 100%; object-fit: cover; border-radius: 10px;
+    }
+    .profile-photo i { font-size: 1.8rem; opacity: 0.3; }
+
+    .profile-section { margin-bottom: 20px; }
+    .profile-section-title {
+        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+        color: #6c757d; margin-bottom: 8px;
+    }
+    .profile-section p { font-size: 0.88rem; color: #ced4da; line-height: 1.6; margin: 0; }
+
+    .how-to-list { list-style: none; padding: 0; margin: 0; }
+    .how-to-list li {
+        font-size: 0.85rem; color: #ced4da; line-height: 1.5;
+        padding: 6px 0 6px 20px; position: relative;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .how-to-list li:last-child { border-bottom: none; }
+    .how-to-list li::before {
+        content: counter(step);
+        counter-increment: step;
+        position: absolute; left: 0;
+        font-size: 0.65rem; font-weight: 700;
+        color: #0d6efd; top: 8px;
+    }
+    .how-to-list { counter-reset: step; }
+
+    .accessory-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .accessory-pill {
+        font-size: 0.75rem; color: #adb5bd;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px; padding: 4px 10px;
+    }
+
+    .profile-skeleton .skel-line {
+        background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s infinite;
+        border-radius: 4px; height: 12px; margin-bottom: 8px;
+    }
+    .profile-skeleton .skel-line.wide  { width: 85%; }
+    .profile-skeleton .skel-line.med   { width: 60%; }
+    .profile-skeleton .skel-line.short { width: 40%; }
+    .profile-skeleton .skel-block {
+        height: 200px; border-radius: 10px; margin-bottom: 20px;
+        background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="glass-card p-4 text-white">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -10,7 +130,7 @@
         </button>
     </div>
 
-    <!-- SEARCH FORM -->
+    <!-- Search form -->
     <form method="POST" action="/" class="row g-2 mb-4">
         <div class="col">
             <input class="form-control form-control-lg" type="text" name="search"
@@ -23,20 +143,21 @@
         </div>
     </form>
 
-    <!-- ITEM LIST -->
+    <!-- Item list -->
     {% for item in items %}
     <div class="item-card">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div class="d-flex justify-content-between align-items-start">
             <div>
                 <h5>{{ item.name }}</h5>
                 <p class="mb-1"><strong>Description:</strong> {{ item.description }}</p>
                 <p class="mb-2"><strong>Barcode:</strong> {{ item.barcode }}</p>
             </div>
 
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
                 <!-- More Info -->
-                <button class="btn btn-sm btn-outline-info"
-                        onclick="openMoreInfo({{ item.name | tojson }}, {{ item.profile | tojson }})">
+                <button class="btn btn-sm btn-outline-info more-info-btn"
+                        data-name="{{ item.name | e }}"
+                        data-barcode="{{ item.barcode | e }}">
                     <i class="fa-solid fa-circle-info me-1"></i> More Info
                 </button>
 
@@ -45,12 +166,11 @@
                         onclick="printLabel('{{ url_for('static', filename=item.label) }}')">
                     <i class="fa-solid fa-print me-1"></i> Print Label
                 </button>
-
                 <form method="POST" action="{{ url_for('delete_label') }}">
-                    <input type="hidden" name="filepath"  value="{{ item.label }}">
+                    <input type="hidden" name="filepath" value="{{ item.label }}">
                     <input type="hidden" name="page_type" value="items">
                     <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="fa-solid fa-trash me-1"></i> Delete Label
+                        <i class="fa-solid fa-trash me-1"></i> Delete
                     </button>
                 </form>
                 {% endif %}
@@ -58,7 +178,8 @@
         </div>
 
         {% if item.label %}
-        <img class="label mt-3" src="{{ url_for('static', filename=item.label) }}" alt="Label for {{ item.name }}">
+        <img class="label mt-3" src="{{ url_for('static', filename=item.label) }}"
+             alt="Label for {{ item.name }}">
         {% endif %}
     </div>
     {% else %}
@@ -66,8 +187,74 @@
     {% endfor %}
 </div>
 
+<!-- More Info modal -->
+<div class="profile-modal-backdrop" id="profileBackdrop" onclick="closeProfileIfOutside(event)">
+    <div class="profile-modal" id="profileModal">
 
-<!-- ─── ADD ITEM MODAL ─── -->
+        <div class="profile-header">
+            <div>
+                <h4 id="profileTitle">Loading…</h4>
+                <span class="category-badge" id="profileCategory"></span>
+            </div>
+            <button class="profile-close" onclick="closeProfile()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="profile-body">
+
+            <!-- Skeleton shown while loading -->
+            <div id="profileSkeleton" class="profile-skeleton">
+                <div class="skel-block"></div>
+                <div class="skel-line wide"></div>
+                <div class="skel-line med"></div>
+                <div class="skel-line short"></div>
+                <div style="height:16px;"></div>
+                <div class="skel-line wide"></div>
+                <div class="skel-line med"></div>
+                <div class="skel-line wide"></div>
+            </div>
+
+            <!-- Content shown after load -->
+            <div id="profileContent" style="display:none;">
+
+                <!-- Photo -->
+                <div class="profile-photo" id="profilePhotoWrap">
+                    <img id="profilePhoto" src="" alt="" style="display:none;">
+                    <i class="fa-solid fa-image" id="profilePhotoFallback"></i>
+                    <span id="profilePhotoLabel">No photo added yet</span>
+                </div>
+
+                <!-- Description -->
+                <div class="profile-section">
+                    <div class="profile-section-title"><i class="fa-solid fa-circle-info me-1"></i>What it does</div>
+                    <p id="profileDescription"></p>
+                </div>
+
+                <!-- How-to -->
+                <div class="profile-section" id="profileHowToSection">
+                    <div class="profile-section-title"><i class="fa-solid fa-list-check me-1"></i>Quick start</div>
+                    <ol class="how-to-list" id="profileHowTo"></ol>
+                </div>
+
+                <!-- Accessories -->
+                <div class="profile-section" id="profileAccessoriesSection" style="display:none;">
+                    <div class="profile-section-title"><i class="fa-solid fa-link me-1"></i>Linked items</div>
+                    <div class="accessory-pills" id="profileAccessories"></div>
+                </div>
+
+                <!-- EJ details strip -->
+                <div class="profile-section" id="profileEjSection" style="display:none;">
+                    <div class="profile-section-title"><i class="fa-solid fa-database me-1"></i>EasyJob</div>
+                    <p id="profileEjDetails" style="font-size:0.78rem; color:#6c757d;"></p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Item modal -->
 <div class="modal fade" id="addItemModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -98,229 +285,124 @@
         </div>
     </div>
 </div>
-
-
-<!-- ─── MORE INFO MODAL ─── -->
-<div class="modal fade" id="moreInfoModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fa-solid fa-circle-info me-2 text-info"></i>
-                    <span id="mi-title">Item Profile</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-
-            <div class="modal-body">
-
-                <!-- VIEW MODE -->
-                <div id="mi-view">
-                    <!-- Item image -->
-                    <div id="mi-img-wrap" class="text-center mb-3 d-none">
-                        <img id="mi-img" src="" alt="Item image"
-                             style="max-height:180px; border-radius:8px; border:1px solid #444;">
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-md-6" id="mi-appearance-wrap">
-                            <h6 class="text-info"><i class="fa-solid fa-eye me-1"></i> Appearance</h6>
-                            <p id="mi-appearance" class="text-secondary small"></p>
-                        </div>
-                        <div class="col-md-6" id="mi-does-wrap">
-                            <h6 class="text-info"><i class="fa-solid fa-bolt me-1"></i> What it does</h6>
-                            <p id="mi-does" class="text-secondary small"></p>
-                        </div>
-                        <div class="col-md-6" id="mi-cases-wrap">
-                            <h6 class="text-info"><i class="fa-solid fa-film me-1"></i> Use cases</h6>
-                            <p id="mi-cases" class="text-secondary small"></p>
-                        </div>
-                        <div class="col-md-6" id="mi-how-wrap">
-                            <h6 class="text-info"><i class="fa-solid fa-screwdriver-wrench me-1"></i> How to use</h6>
-                            <p id="mi-how" class="text-secondary small"></p>
-                        </div>
-                        <div class="col-12" id="mi-similar-wrap">
-                            <h6 class="text-info"><i class="fa-solid fa-layer-group me-1"></i> Similar items</h6>
-                            <p id="mi-similar" class="text-secondary small"></p>
-                        </div>
-                    </div>
-
-                    <div id="mi-empty" class="text-center text-secondary py-3 d-none">
-                        <i class="fa-solid fa-file-circle-question fa-2x mb-2"></i>
-                        <p class="mb-0">No profile yet. Click <strong>Edit</strong> to add info.</p>
-                    </div>
-                </div>
-
-                <!-- EDIT MODE -->
-                <div id="mi-edit" class="d-none">
-                    <div class="mb-3">
-                        <label class="form-label small">Image URL <span class="text-secondary">(optional)</span></label>
-                        <input class="form-control form-control-sm" id="edit-image_url" placeholder="https://...">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small">Appearance / What it looks like</label>
-                        <textarea class="form-control form-control-sm" id="edit-appearance" rows="2"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small">What it does <span class="text-secondary">(plain English)</span></label>
-                        <textarea class="form-control form-control-sm" id="edit-what_it_does" rows="2"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small">Situations it's used in</label>
-                        <textarea class="form-control form-control-sm" id="edit-use_cases" rows="2"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small">How to use it</label>
-                        <textarea class="form-control form-control-sm" id="edit-how_to_use" rows="3"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small">Similar items</label>
-                        <input class="form-control form-control-sm" id="edit-similar_items"
-                               placeholder="e.g. Sennheiser G3, Lectrosonics SSM">
-                    </div>
-                </div>
-
-            </div><!-- /modal-body -->
-
-            <div class="modal-footer justify-content-between">
-                <div>
-                    <span id="mi-save-status" class="text-success small me-2 d-none">
-                        <i class="fa-solid fa-check me-1"></i>Saved
-                    </span>
-                </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-secondary btn-sm" id="mi-btn-edit"  onclick="miStartEdit()">
-                        <i class="fa-solid fa-pen me-1"></i> Edit
-                    </button>
-                    <button class="btn btn-primary btn-sm d-none" id="mi-btn-save" onclick="miSave()">
-                        <i class="fa-solid fa-floppy-disk me-1"></i> Save
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm d-none" id="mi-btn-cancel" onclick="miCancelEdit()">
-                        Cancel
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
-
 
 {% block scripts %}
 <script>
-// ─── Print ───
+document.addEventListener('click', e => {
+    const btn = e.target.closest('.more-info-btn');
+    if (btn) openProfile(btn.dataset.name, btn.dataset.barcode);
+});
+
+function openProfile(name, barcode) {
+    // Reset state
+    document.getElementById('profileTitle').textContent    = name;
+    document.getElementById('profileCategory').textContent = '';
+    document.getElementById('profileSkeleton').style.display  = 'block';
+    document.getElementById('profileContent').style.display   = 'none';
+    document.getElementById('profileBackdrop').classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    const params = new URLSearchParams({ name, barcode });
+    fetch(`/item_profile?${params}`)
+        .then(r => r.json())
+        .then(data => renderProfile(data))
+        .catch(err => renderProfile({ error: String(err) }));
+}
+
+function renderProfile(data) {
+    document.getElementById('profileSkeleton').style.display = 'none';
+    document.getElementById('profileContent').style.display  = 'block';
+
+    if (data.error) {
+        document.getElementById('profileDescription').textContent = `Error: ${data.error}`;
+        return;
+    }
+
+    // Category badge
+    const cat = data.ej_details?.Category || '';
+    const catEl = document.getElementById('profileCategory');
+    catEl.textContent = cat;
+    catEl.style.display = cat ? 'inline-block' : 'none';
+
+    // Photo placeholder
+    const imgEl       = document.getElementById('profilePhoto');
+    const fallbackEl  = document.getElementById('profilePhotoFallback');
+    imgEl.style.display      = 'none';
+    fallbackEl.style.display = 'flex';
+
+    // AI content
+    const ai = data.ai_content || {};
+    document.getElementById('profileDescription').textContent = ai.description || 'No description available.';
+
+    const howToEl = document.getElementById('profileHowTo');
+    howToEl.innerHTML = '';
+    const steps = ai.how_to || [];
+    if (steps.length) {
+        steps.forEach(step => {
+            const li = document.createElement('li');
+            li.textContent = step;
+            howToEl.appendChild(li);
+        });
+        document.getElementById('profileHowToSection').style.display = 'block';
+    } else {
+        document.getElementById('profileHowToSection').style.display = 'none';
+    }
+
+    // Accessories
+    const accEl  = document.getElementById('profileAccessories');
+    const accSec = document.getElementById('profileAccessoriesSection');
+    accEl.innerHTML = '';
+    if (data.accessories && data.accessories.length) {
+        data.accessories.forEach(a => {
+            const span = document.createElement('span');
+            span.className   = 'accessory-pill';
+            span.textContent = a.name;
+            accEl.appendChild(span);
+        });
+        accSec.style.display = 'block';
+    } else {
+        const msg = data.accessories_debug || 'No linked items found in EasyJob.';
+        accEl.innerHTML = `<span style="font-size:0.78rem; color:#6c757d;">${msg}</span>`;
+        accSec.style.display = 'block';
+    }
+
+    // EJ details strip
+    const ej  = data.ej_details || {};
+    const ejSec = document.getElementById('profileEjSection');
+    if (ej.Number || ej.ID) {
+        document.getElementById('profileEjDetails').textContent =
+            `EJ Number: ${ej.Number || '—'}  ·  ID: ${ej.ID || '—'}  ·  Owned: ${ej.RentalInventory ?? '—'}`;
+        ejSec.style.display = 'block';
+    } else {
+        ejSec.style.display = 'none';
+    }
+}
+
+function closeProfile() {
+    document.getElementById('profileBackdrop').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function closeProfileIfOutside(e) {
+    if (e.target === document.getElementById('profileBackdrop')) closeProfile();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfile(); });
+
 function printLabel(imageUrl) {
     const win = window.open('', '_blank');
     win.document.write(`
         <html><head><title>Print Label</title>
         <style>
             @page { size: 50mm 25mm; margin: 0; }
-            body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
-            img  { width:50mm; height:25mm; object-fit:contain; }
+            body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+            img  { width: 50mm; height: 25mm; object-fit: contain; }
         </style></head>
         <body onload="window.print(); window.close();">
             <img src="${imageUrl}">
         </body></html>`);
     win.document.close();
-}
-
-// ─── More Info modal ───
-let _miCurrentItem = null;
-let _miOrigProfile = {};
-
-function openMoreInfo(itemName, profile) {
-    _miCurrentItem = itemName;
-    _miOrigProfile = profile || {};
-
-    document.getElementById('mi-title').textContent = itemName;
-    miPopulateView(_miOrigProfile);
-    miCancelEdit();   // ensure we start in view mode
-
-    new bootstrap.Modal(document.getElementById('moreInfoModal')).show();
-}
-
-function miPopulateView(p) {
-    const set = (id, val) => {
-        const el   = document.getElementById(id);
-        const wrap = document.getElementById(id + '-wrap');
-        if (el)   el.textContent = val || '';
-        if (wrap) wrap.classList.toggle('d-none', !val);
-    };
-
-    set('mi-appearance', p.appearance);
-    set('mi-does',       p.what_it_does);
-    set('mi-cases',      p.use_cases);
-    set('mi-how',        p.how_to_use);
-    set('mi-similar',    p.similar_items);
-
-    // Image
-    const imgWrap = document.getElementById('mi-img-wrap');
-    const img     = document.getElementById('mi-img');
-    if (p.image_url) {
-        img.src = p.image_url;
-        imgWrap.classList.remove('d-none');
-    } else {
-        imgWrap.classList.add('d-none');
-    }
-
-    // Empty state
-    const hasData = p.appearance || p.what_it_does || p.use_cases || p.how_to_use || p.similar_items || p.image_url;
-    document.getElementById('mi-empty').classList.toggle('d-none', !!hasData);
-}
-
-function miStartEdit() {
-    const p = _miOrigProfile;
-    document.getElementById('edit-image_url').value    = p.image_url    || '';
-    document.getElementById('edit-appearance').value   = p.appearance   || '';
-    document.getElementById('edit-what_it_does').value = p.what_it_does || '';
-    document.getElementById('edit-use_cases').value    = p.use_cases    || '';
-    document.getElementById('edit-how_to_use').value   = p.how_to_use   || '';
-    document.getElementById('edit-similar_items').value= p.similar_items|| '';
-
-    document.getElementById('mi-view').classList.add('d-none');
-    document.getElementById('mi-edit').classList.remove('d-none');
-    document.getElementById('mi-btn-edit').classList.add('d-none');
-    document.getElementById('mi-btn-save').classList.remove('d-none');
-    document.getElementById('mi-btn-cancel').classList.remove('d-none');
-    document.getElementById('mi-save-status').classList.add('d-none');
-}
-
-function miCancelEdit() {
-    document.getElementById('mi-view').classList.remove('d-none');
-    document.getElementById('mi-edit').classList.add('d-none');
-    document.getElementById('mi-btn-edit').classList.remove('d-none');
-    document.getElementById('mi-btn-save').classList.add('d-none');
-    document.getElementById('mi-btn-cancel').classList.add('d-none');
-}
-
-async function miSave() {
-    const payload = {
-        item_name:    _miCurrentItem,
-        image_url:    document.getElementById('edit-image_url').value.trim(),
-        appearance:   document.getElementById('edit-appearance').value.trim(),
-        what_it_does: document.getElementById('edit-what_it_does').value.trim(),
-        use_cases:    document.getElementById('edit-use_cases').value.trim(),
-        how_to_use:   document.getElementById('edit-how_to_use').value.trim(),
-        similar_items:document.getElementById('edit-similar_items').value.trim()
-    };
-
-    const r = await fetch('/item_profile/save', {
-        method:  'POST',
-        headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify(payload)
-    });
-
-    if (r.ok) {
-        _miOrigProfile = payload;
-        miPopulateView(payload);
-        miCancelEdit();
-        const status = document.getElementById('mi-save-status');
-        status.classList.remove('d-none');
-        setTimeout(() => status.classList.add('d-none'), 3000);
-    } else {
-        alert('Save failed. Please try again.');
-    }
 }
 </script>
 {% endblock %}
