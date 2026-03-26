@@ -1,0 +1,327 @@
+{% extends "base_layout.html" %}
+{% block title %}Barcode Finder{% endblock %}
+
+{% block head %}
+<style>
+    #scan-input {
+        position: fixed;
+        opacity: 0;
+        pointer-events: none;
+        top: 0; left: 0;
+        width: 1px; height: 1px;
+    }
+
+    .scan-active-indicator {
+        display: inline-block;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: #dc3545;
+        margin-right: 8px;
+        transition: background 0.2s;
+    }
+    .scan-active-indicator.listening {
+        background: #28a745;
+        box-shadow: 0 0 8px #28a74588;
+        animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+    }
+
+    .barcode-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.04);
+        margin-bottom: 8px;
+        transition: background 0.2s, transform 0.15s;
+        font-family: monospace;
+        font-size: 1rem;
+    }
+    .barcode-item.found {
+        background: rgba(40, 167, 69, 0.18);
+        border: 1px solid #28a74566;
+    }
+    .barcode-item.found .barcode-text {
+        text-decoration: line-through;
+        opacity: 0.5;
+    }
+    .barcode-item .status-icon {
+        font-size: 1.1rem;
+        width: 20px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .barcode-item .barcode-text {
+        flex: 1;
+    }
+    .barcode-item .found-time {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    #last-scan-display {
+        font-family: monospace;
+        font-size: 1.1rem;
+        color: #adb5bd;
+        min-height: 1.5em;
+    }
+    #last-scan-display.flash-match {
+        color: #28a745;
+        animation: flashGreen 0.4s ease;
+    }
+    #last-scan-display.flash-nomatch {
+        color: #dc3545;
+        animation: flashRed 0.4s ease;
+    }
+    @keyframes flashGreen {
+        0%   { background: rgba(40,167,69,0.3); border-radius: 4px; }
+        100% { background: transparent; }
+    }
+    @keyframes flashRed {
+        0%   { background: rgba(220,53,69,0.3); border-radius: 4px; }
+        100% { background: transparent; }
+    }
+
+    .progress-label {
+        font-size: 0.85rem;
+        color: #adb5bd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<input id="scan-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off">
+
+<div class="glass-card p-4 text-white">
+    <h2 class="mb-1">Barcode Finder</h2>
+    <p class="text-secondary mb-4">Enter a list of barcodes to find, then scan away — it beeps when matched.</p>
+
+    <div class="row g-4">
+
+        <!-- Left: setup -->
+        <div class="col-md-5">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Barcode List</label>
+                <textarea id="barcode-input" class="form-control font-monospace"
+                          rows="10"
+                          placeholder="One barcode per line&#10;BP2/205&#10;BP2/206&#10;@si94884"></textarea>
+                <small class="text-secondary">One per line. Spaces and case ignored.</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" id="btn-start">
+                    <i class="fa-solid fa-play me-1"></i> Start Scanning
+                </button>
+                <button class="btn btn-outline-secondary" id="btn-reset" style="display:none">
+                    <i class="fa-solid fa-rotate-left me-1"></i> Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Right: live scanning -->
+        <div class="col-md-7" id="scan-panel" style="display:none">
+
+            <!-- Status bar -->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center">
+                    <span class="scan-active-indicator listening" id="scan-indicator"></span>
+                    <span id="scan-status-text" class="small">Listening for scans...</span>
+                </div>
+                <span class="progress-label">
+                    <span id="found-count">0</span> / <span id="total-count">0</span> found
+                </span>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="progress mb-3" style="height:6px; background:rgba(255,255,255,0.1)">
+                <div id="scan-progress-bar" class="progress-bar bg-success" style="width:0%; transition: width 0.3s"></div>
+            </div>
+
+            <!-- Last scanned -->
+            <div class="mb-3 p-2 rounded" style="background:rgba(255,255,255,0.04)">
+                <div class="text-secondary small mb-1">Last scan:</div>
+                <div id="last-scan-display">—</div>
+            </div>
+
+            <!-- Barcode list -->
+            <div id="barcode-list"></div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// -- State --
+let barcodes   = [];   // { raw, normalised, found, foundAt }
+let scanning   = false;
+let scanBuffer = "";
+let scanTimer  = null;
+
+// -- Audio --
+function beep(freq = 880, duration = 120, type = "square") {
+    try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type      = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration / 1000);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration / 1000);
+    } catch (e) { /* audio not available */ }
+}
+
+function beepMatch()   { beep(880, 150, "square"); setTimeout(() => beep(1100, 150, "square"), 160); }
+function beepNoMatch() { beep(220, 300, "sawtooth"); }
+function beepAllDone() {
+    beep(660, 100, "square");
+    setTimeout(() => beep(880, 100, "square"), 120);
+    setTimeout(() => beep(1100, 200, "square"), 250);
+}
+
+// -- Normalise --
+function norm(s) { return s.trim().toLowerCase().replace(/\s+/g, ""); }
+
+// -- Render list --
+function renderList() {
+    const el = document.getElementById("barcode-list");
+    el.innerHTML = "";
+    barcodes.forEach((b, i) => {
+        const div = document.createElement("div");
+        div.className = "barcode-item" + (b.found ? " found" : "");
+        div.id = `bc-${i}`;
+        div.innerHTML = `
+            <span class="status-icon">${b.found ? "✅" : "⬜"}</span>
+            <span class="barcode-text">${escHtml(b.raw)}</span>
+            ${b.found ? `<span class="found-time">${b.foundAt}</span>` : ""}
+        `;
+        el.appendChild(div);
+    });
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function updateProgress() {
+    const found = barcodes.filter(b => b.found).length;
+    const total = barcodes.length;
+    document.getElementById("found-count").textContent = found;
+    document.getElementById("total-count").textContent = total;
+    document.getElementById("scan-progress-bar").style.width = total ? (found / total * 100) + "%" : "0%";
+
+    if (total > 0 && found === total) {
+        document.getElementById("scan-status-text").textContent = "All barcodes found! 🎉";
+        document.getElementById("scan-indicator").classList.remove("listening");
+        beepAllDone();
+    }
+}
+
+// -- Handle a completed scan --
+function handleScan(raw) {
+    const scanned = norm(raw);
+    if (!scanned) return;
+
+    const display = document.getElementById("last-scan-display");
+    display.textContent = raw;
+    display.className   = "";
+    void display.offsetWidth; // force reflow for animation restart
+
+    const match = barcodes.find(b => !b.found && norm(b.raw) === scanned);
+    if (match) {
+        match.found   = true;
+        match.foundAt = new Date().toLocaleTimeString();
+        beepMatch();
+        display.classList.add("flash-match");
+        renderList();
+        updateProgress();
+        // Scroll matched item into view
+        const el = document.getElementById(`bc-${barcodes.indexOf(match)}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
+        beepNoMatch();
+        display.classList.add("flash-nomatch");
+    }
+}
+
+// -- Keyboard capture --
+// Bluetooth scanners send keystrokes ending in Enter.
+// We buffer keystrokes; on Enter (or after 80ms silence) we fire handleScan.
+document.addEventListener("keydown", (e) => {
+    if (!scanning) return;
+
+    if (e.key === "Enter") {
+        clearTimeout(scanTimer);
+        if (scanBuffer) handleScan(scanBuffer);
+        scanBuffer = "";
+        e.preventDefault();
+        return;
+    }
+
+    // Ignore modifier-only keypresses
+    if (e.key.length === 1) {
+        scanBuffer += e.key;
+        clearTimeout(scanTimer);
+        scanTimer = setTimeout(() => {
+            if (scanBuffer) handleScan(scanBuffer);
+            scanBuffer = "";
+        }, 80);
+    }
+
+    // Keep focus on the hidden input to capture scanner input
+    document.getElementById("scan-input").focus();
+});
+
+// -- Start --
+document.getElementById("btn-start").addEventListener("click", () => {
+    const lines = document.getElementById("barcode-input").value
+        .split("\n")
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+
+    if (!lines.length) return;
+
+    barcodes  = lines.map(raw => ({ raw, found: false, foundAt: null }));
+    scanning  = true;
+
+    document.getElementById("scan-panel").style.display = "block";
+    document.getElementById("btn-start").style.display  = "none";
+    document.getElementById("btn-reset").style.display  = "inline-block";
+    document.getElementById("barcode-input").disabled   = true;
+
+    renderList();
+    updateProgress();
+    document.getElementById("scan-input").focus();
+});
+
+// -- Reset --
+document.getElementById("btn-reset").addEventListener("click", () => {
+    scanning  = false;
+    barcodes  = [];
+    scanBuffer = "";
+    clearTimeout(scanTimer);
+
+    document.getElementById("scan-panel").style.display  = "none";
+    document.getElementById("btn-start").style.display   = "inline-block";
+    document.getElementById("btn-reset").style.display   = "none";
+    document.getElementById("barcode-input").disabled    = false;
+    document.getElementById("barcode-input").value       = "";
+    document.getElementById("last-scan-display").textContent = "—";
+    document.getElementById("scan-status-text").textContent  = "Listening for scans...";
+    document.getElementById("scan-indicator").classList.add("listening");
+});
+
+// Keep the hidden input focused while scanning so scanner keystrokes are captured
+document.addEventListener("click", () => {
+    if (scanning) document.getElementById("scan-input").focus();
+});
+</script>
+{% endblock %}

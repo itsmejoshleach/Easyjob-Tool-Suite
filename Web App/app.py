@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from API import easyjob as ej
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB — handles large EJ item exports
 
 
 # -- Config --
@@ -687,17 +688,57 @@ def save_calendar_watch(data):
     with open(CALENDAR_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+def _format_ej_date(raw: str) -> str:
+    # EJ dates look like "2026-03-16T09:00:00.0000000" — strip to first 19 chars to ignore fractional seconds
+    if not raw:
+        return ""
+    try:
+        dt = datetime.strptime(raw[:19], "%Y-%m-%dT%H:%M:%S")
+        if dt.hour == 0 and dt.minute == 0:
+            return dt.strftime("%d %b %Y")       # e.g. "16 Mar 2026"
+        return dt.strftime("%d %b, %H:%M")       # e.g. "16 Mar, 09:00"
+    except ValueError:
+        pass
+    try:
+        dt = datetime.strptime(raw[:10], "%Y-%m-%d")
+        return dt.strftime("%d %b %Y")
+    except ValueError:
+        return raw
+
+def _parse_caption(caption: str):
+    # "Prep | Trainee Prep"  →  type="Prep",     role="Trainee Prep"
+    # "LED | LED Engineer"   →  type="LED",      role="LED Engineer"
+    # "Edays - External"     →  type="Edays - External", role=None
+    if "|" in caption:
+        parts = [p.strip() for p in caption.split("|", 1)]
+        return parts[0], parts[1]
+    return caption.strip(), None
+
 def _entry_key(entry):
-    # Stable key for a calendar entry — use EJ id if present, else fall back to caption+date
-    return str(entry.get("Id") or entry.get("IdJob") or f"{entry.get('Caption','')}|{entry.get('StartDate','')}")
+    return str(entry.get("Id") or f"{entry.get('Caption','')}|{entry.get('StartDate','')}")
 
 def _entry_summary(entry):
+    caption   = (entry.get("Caption")     or "").strip()
+    post      = (entry.get("PostCaption") or "").strip()
+    raw_start = entry.get("StartDate") or ""
+    raw_end   = entry.get("EndDate")   or ""
+
+    job_type, role = _parse_caption(caption)
+
+    # Use PostCaption as the title only if it looks like a real job name
+    # (contains a space or is long enough to be meaningful — not just "Approved" etc.)
+    use_post = post and (len(post) > 12 or " " in post)
+    title    = post if use_post else caption
+
     return {
-        "id":      _entry_key(entry),
-        "caption": entry.get("Caption") or entry.get("Title") or "Untitled",
-        "start":   entry.get("StartDate") or entry.get("Start") or "",
-        "end":     entry.get("EndDate")   or entry.get("End")   or "",
-        "type":    entry.get("Type")      or entry.get("JobState") or "",
+        "id":        _entry_key(entry),
+        "title":     title,
+        "type":      job_type,
+        "role":      role,
+        "color":     entry.get("Color") or "",
+        "start":     _format_ej_date(raw_start),
+        "end":       _format_ej_date(raw_end),
+        "start_raw": raw_start,
     }
 
 def refresh_calendar_watch():
@@ -710,7 +751,7 @@ def refresh_calendar_watch():
 
     today = datetime.now().strftime("%Y-%m-%d")
     try:
-        raw = ej.get_calendar(start_date=today, days=35)
+        raw = ej.get_calendar(start_date=today, days=14)
     except Exception as e:
         data["errors"] = [str(e)]
         data["last_checked"] = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -723,13 +764,30 @@ def refresh_calendar_watch():
         save_calendar_watch(data)
         return
 
-    known    = data.get("entries", {})
+    # Rebuild fresh each refresh — don't accumulate stale entries from previous runs
+    known    = {}
     new_ones = []
+    today    = datetime.now().date()
+    old_keys = set(data.get("entries", {}).keys())
 
     for entry in raw:
+        caption = (entry.get("Caption") or "").lower()
+
+        # Only track job entries — skip Edays, holidays, and other non-job calendar items
+        if not ("prep" in caption or "on site" in caption or "onsite" in caption):
+            continue
+
+        # Drop entries whose end date is already in the past
+        raw_end = (entry.get("EndDate") or entry.get("StartDate") or "")[:10]
+        try:
+            if datetime.strptime(raw_end, "%Y-%m-%d").date() < today:
+                continue
+        except ValueError:
+            pass
+
         key     = _entry_key(entry)
         summary = _entry_summary(entry)
-        if key not in known:
+        if key not in old_keys:
             new_ones.append(summary)
         known[key] = summary
 
@@ -776,6 +834,66 @@ def polling():
     ej_ok    = ej_login()
     return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="job_watching")
 
+def _shipping_status(day_time_out, day_time_in, returned=False):
+    # Derive shipping status from DayTimeOut / DayTimeIn.
+    # "returned" is a manual flag set by staff via the UI.
+    #
+    #   Upcoming          — before DayTimeOut
+    #   Shipped           — past DayTimeOut, before DayTimeIn
+    #   Past Return Date  — past DayTimeIn, not manually marked returned
+    #   Returned          — manually marked returned by staff
+    if returned:
+        return "Returned"
+    if not day_time_out:
+        return None
+    try:
+        now      = datetime.now()
+        time_out = datetime.strptime(day_time_out[:19], "%Y-%m-%dT%H:%M:%S")
+        time_in  = datetime.strptime(day_time_in[:19],  "%Y-%m-%dT%H:%M:%S") if day_time_in else None
+
+        if now < time_out:
+            return "Upcoming"
+        if time_in is None or now < time_in:
+            return "Shipped"
+        return "Past Return Date"
+    except (ValueError, TypeError):
+        return None
+
+def _fetch_watcher_details(job_id, job_no):
+    # Fetch job details + items for a watcher entry.
+    # Returns (job_state_str, day_time_out, day_time_in, items_dict, error_str)
+    try:
+        details = ej.get_job_details(int(job_id))
+        if not details:
+            return None, None, None, {}, "Job details not found"
+
+        # JobState can be a dict {"Caption": "Confirmed"} or a plain string depending on EJ version
+        job_state_raw = details.get("JobState", "Unknown")
+        if isinstance(job_state_raw, dict):
+            job_state = job_state_raw.get("Caption", "Unknown")
+        else:
+            job_state = str(job_state_raw)
+
+        day_time_out = details.get("DayTimeOut") or ""
+        day_time_in  = details.get("DayTimeIn")  or ""
+
+        items_dict = {}
+        try:
+            items = ej.get_items_in_job(job_id)
+            if items:
+                items_dict = {
+                    str(iid): {"name": i.get("name"), "qty": i.get("quantity")}
+                    for iid, i in items.items()
+                }
+        except Exception:
+            pass
+
+        return job_state, day_time_out, day_time_in, items_dict, None
+
+    except Exception as e:
+        return None, None, None, {}, str(e)
+
+
 @app.route("/polling/add", methods=["POST"])
 def polling_add():
     job_no = request.form.get("job_no", "").strip()
@@ -788,41 +906,56 @@ def polling_add():
         return redirect(url_for("polling"))
 
     watcher = {
-        "job_no":       job_no,
-        "label":        label or job_no,
-        "added":        datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "last_status":  None,
-        "last_locked":  None,
-        "last_items":   {},
-        "last_changed": None,
-        "has_change":   False,
-        "error":        None
+        "job_no":            job_no,
+        "label":             label or job_no,
+        "added":             datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "last_status":       None,
+        "last_locked":       None,
+        "shipping_status":   None,
+        "day_time_out":      None,
+        "day_time_in":       None,
+        "last_items":        {},
+        "last_changed":      None,
+        "has_change":        False,
+        "returned":          False,
+        "error":             None
     }
 
     try:
         ej_login()
         job_info = ej.get_job_info(job_no)
         if job_info:
-            job_data  = job_info[0]
-            job_id    = job_data.get("Id")
-            job_state = job_data.get("JobState", "Unknown")
-            watcher["label"]       = label or job_data.get("Caption", job_no)
-            watcher["last_status"] = job_state
-            watcher["last_locked"] = (job_state == "Proposed")
+            job_data = job_info[0]
+            job_id   = job_data.get("Id")
+            watcher["label"] = label or job_data.get("Caption", job_no)
 
-            try:
-                items = ej.get_items_in_job(job_id)
-                if items:
-                    watcher["last_items"] = {
-                        str(iid): {"name": i.get("name"), "qty": i.get("quantity")}
-                        for iid, i in items.items()
-                    }
-            except Exception:
-                pass
+            job_state, day_time_out, day_time_in, items_dict, err = _fetch_watcher_details(job_id, job_no)
+            watcher["last_status"]     = job_state
+            watcher["last_locked"]     = (job_state == "Proposed") if job_state else None
+            watcher["day_time_out"]    = day_time_out
+            watcher["day_time_in"]     = day_time_in
+            watcher["shipping_status"] = _shipping_status(day_time_out, day_time_in, returned=False)
+            watcher["last_items"]      = items_dict
+            if err:
+                watcher["error"] = err
     except Exception as e:
         watcher["error"] = str(e)
 
     watchers.append(watcher)
+    save_watchers(watchers)
+    return redirect(url_for("polling"))
+
+@app.route("/polling/mark_returned", methods=["POST"])
+def polling_mark_returned():
+    job_no   = request.form.get("job_no", "").strip()
+    undo     = request.form.get("undo", "0") == "1"
+    watchers = load_watchers()
+    for w in watchers:
+        if w["job_no"] == job_no:
+            w["returned"]          = not undo
+            w["shipping_status"]   = _shipping_status(
+                w.get("day_time_out"), w.get("day_time_in"), returned=not undo
+            )
     save_watchers(watchers)
     return redirect(url_for("polling"))
 
@@ -837,9 +970,16 @@ def polling_remove():
 def polling_clear_flag():
     job_no   = request.form.get("job_no", "").strip()
     watchers = load_watchers()
-    for w in watchers:
-        if w["job_no"] == job_no:
-            w["has_change"] = False
+
+    # If the change being acknowledged is "Past Return Date", auto-delete the watcher
+    target = next((w for w in watchers if w["job_no"] == job_no), None)
+    if target and target.get("shipping_status") == "Past Return Date":
+        watchers = [w for w in watchers if w["job_no"] != job_no]
+    else:
+        for w in watchers:
+            if w["job_no"] == job_no:
+                w["has_change"] = False
+
     save_watchers(watchers)
     return redirect(url_for("polling"))
 
@@ -856,34 +996,28 @@ def polling_refresh():
                 w["error"] = "Job not found"
                 continue
 
-            job_data   = job_info[0]
-            job_id     = job_data.get("Id")
-            new_status = job_data.get("JobState", "Unknown")
-            new_locked = (new_status == "Proposed")
+            job_id = job_info[0].get("Id")
+            job_state, day_time_out, day_time_in, new_items, err = _fetch_watcher_details(job_id, w["job_no"])
 
-            new_items = {}
-            try:
-                items = ej.get_items_in_job(job_id)
-                if items:
-                    new_items = {
-                        str(iid): {"name": i.get("name"), "qty": i.get("quantity")}
-                        for iid, i in items.items()
-                    }
-            except Exception:
-                pass
+            new_shipping = _shipping_status(day_time_out, day_time_in, returned=w.get("returned", False))
+            new_locked   = (job_state == "Proposed") if job_state else None
 
-            status_changed = w["last_status"] != new_status
-            locked_changed = w.get("last_locked") != new_locked
-            items_changed  = w.get("last_items", {}) != new_items
+            status_changed   = w.get("last_status")     != job_state
+            locked_changed   = w.get("last_locked")     != new_locked
+            shipping_changed = w.get("shipping_status") != new_shipping
+            items_changed    = w.get("last_items", {})  != new_items
 
-            if status_changed or locked_changed or items_changed:
+            if status_changed or locked_changed or shipping_changed or items_changed:
                 w["has_change"]   = True
                 w["last_changed"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-            w["last_status"] = new_status
-            w["last_locked"] = new_locked
-            w["last_items"]  = new_items
-            w["error"]       = None
+            w["last_status"]     = job_state
+            w["last_locked"]     = new_locked
+            w["shipping_status"] = new_shipping
+            w["day_time_out"]    = day_time_out
+            w["day_time_in"]     = day_time_in
+            w["last_items"]      = new_items
+            w["error"]           = err
 
         except Exception as e:
             w["error"] = str(e)
@@ -1068,7 +1202,7 @@ def run_import(items):
             if status["processed"] % 25 == 0:
                 save_import_status(status)
             continue
-        number     = (item.get("Number") or "").strip()
+        number     = (item.get("Number") or "").strip()  # kept for reference, not used in CSV
         category   = (item.get("Category") or "").strip()
         cat_parent = (item.get("CategoryParent") or "").strip()
         item_id    = item.get("IdStockType")
@@ -1088,28 +1222,23 @@ def run_import(items):
                 save_import_status(status)
             continue
 
-        # Check DeviceList to decide if barcoded
+        # Check DeviceList — item is individually barcoded only if devices have InventoryNumber values
         has_devices = False
         try:
             devices     = ej.get_device_list(item_id)
-            has_devices = isinstance(devices, list) and len(devices) > 0
+            has_devices = isinstance(devices, list) and any(
+                d.get("InventoryNumber") for d in devices
+            )
         except Exception as e:
             status["errors"].append(f"DeviceList failed for '{name}' (id {item_id}): {e}")
 
         if has_devices:
-            # Individually barcoded (InventoryNumber like BP2/001) — name + desc only, no barcode/label
+            # Individually barcoded (has InventoryNumber like BP2/001) — name + desc only, no barcode/label
             new_rows.append([name, desc, "", "", ""])
             status["barcoded"] += 1
         else:
-            # Non-barcoded — use EJ Number (e.g. 1007969.00) as barcode, generate label
-            barcode = number or str(item_id)
-            try:
-                barcode_path = generate_barcode(barcode, name, custom=False)
-                create_label(barcode_path, name, custom=False)
-                new_rows.append([name, desc, barcode, "", ""])
-            except Exception as e:
-                status["errors"].append(f"Label failed for '{name}': {e}")
-                new_rows.append([name, desc, barcode, "", ""])
+            # Non-barcoded stock — no barcode, no label
+            new_rows.append([name, desc, "", "", ""])
             status["unbarcoded"] += 1
 
         existing_names.add(name.lower())
@@ -1130,28 +1259,80 @@ def run_import(items):
 
 @app.route("/import", methods=["GET"])
 def import_page():
-    status = load_import_status()
-    return render_template("import.html", page="import", status=status)
+    status       = load_import_status()
+    fetch_status = load_fetch_status()
+    return render_template("import.html", page="import", status=status, fetch_running=fetch_status.get("running", False))
+
+
+FETCH_STATUS_FILE = "./fetch_status.json"
+EJ_EXPORT_FILE    = "./ej_export.json"
+
+# fetch_status.json — metadata only; items live in ej_export.json to avoid huge in-memory JSON
+def load_fetch_status():
+    if not os.path.exists(FETCH_STATUS_FILE):
+        return {"running": False}
+    try:
+        with open(FETCH_STATUS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, ValueError):
+        return {"running": False}  # empty or corrupt file — treat as fresh
+
+def save_fetch_status(status):
+    with open(FETCH_STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(status, f, indent=2)
+
+def load_ej_export():
+    if not os.path.exists(EJ_EXPORT_FILE):
+        return []
+    with open(EJ_EXPORT_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _run_fetch():
+    save_fetch_status({"running": True, "count": 0, "error": None})
+    try:
+        if not ej_login():
+            save_fetch_status({"running": False, "count": 0, "error": "EasyJob not configured — check .env credentials"})
+            return
+        items = ej.get_all_items_full()
+        if not isinstance(items, list):
+            save_fetch_status({"running": False, "count": 0, "error": f"Unexpected response: {type(items).__name__}"})
+            return
+        with open(EJ_EXPORT_FILE, "w", encoding="utf-8") as f:
+            json.dump(items, f, indent=2)
+        save_fetch_status({"running": False, "count": len(items), "error": None})
+    except Exception as e:
+        save_fetch_status({"running": False, "count": 0, "error": str(e)})
+
+
+@app.route("/import/fetch_from_ej", methods=["POST"])
+def import_fetch_from_ej():
+    status = load_fetch_status()
+    if status.get("running"):
+        return jsonify({"already_running": True})
+    threading.Thread(target=_run_fetch, daemon=True).start()
+    return jsonify({"started": True})
+
+
+@app.route("/import/fetch_status", methods=["GET"])
+def import_fetch_status():
+    return jsonify(load_fetch_status())
 
 
 @app.route("/import/start", methods=["POST"])
 def import_start():
-    # Reject if already running
-    status = load_import_status()
-    if status and status.get("running"):
+    if load_import_status() and load_import_status().get("running"):
         return jsonify({"error": "Import already running"}), 409
 
-    raw = request.form.get("json_data", "").strip()
-    if not raw:
-        return jsonify({"error": "No JSON provided"}), 400
+    # Read items from ej_export.json on disk — no POST body needed
+    fetch = load_fetch_status()
+    if fetch.get("error"):
+        return jsonify({"error": f"Fetch error: {fetch['error']}"}), 400
+    if fetch.get("running"):
+        return jsonify({"error": "Fetch still in progress — wait for it to finish"}), 409
 
-    try:
-        items = json.loads(raw)
-    except json.JSONDecodeError as e:
-        return jsonify({"error": f"Invalid JSON: {e}"}), 400
-
-    if not isinstance(items, list):
-        return jsonify({"error": "Expected a JSON array"}), 400
+    items = load_ej_export()
+    if not items:
+        return jsonify({"error": "No items found — run Fetch from EasyJob first"}), 400
 
     if not ej_login():
         return jsonify({"error": "EasyJob not configured — check .env credentials"}), 500
@@ -1166,6 +1347,13 @@ def import_status():
     if not status:
         return jsonify({"running": False, "never_run": True})
     return jsonify(status)
+
+
+# -- Barcode Scanner --
+
+@app.route("/barcode_scan")
+def barcode_scan():
+    return render_template("barcode_scan.html", page="barcode_scan")
 
 
 # -- Run --

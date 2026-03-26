@@ -10,14 +10,14 @@
   ☐ Send notifications on changes
   ☐ Display changes in web UI
     Job Watch:
-  ☐ Add job confirmation/unlock notifications
-  ☐ Add ability to "Mark changes as Read"
+  ✔ Add job confirmation/unlock notifications @done(26-03-26 09:43)
+  ✔ Add ability to "Mark changes as Read" @done(26-03-26 09:43)
     item availability watcher:
   ☐ Track when items return from jobs
   ☐ Show next available date
     Calendar Watch:
-  ☐ Change time & Date to a readable format
-  ☐ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title. Otherwise use `Caption` + `PostCaption`
+  ✔ Change time & Date to a readable format @done(26-03-11 09:10)
+  ✔ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title. Otherwise use `Caption` + `PostCaption` @done(26-03-11 09:10)
 
 ### Stock Check Page
 ✔ Create new stock check page/tab @done(26-03-10 21:48)
@@ -32,10 +32,10 @@
 ✔ Add "More Info" button to item cards @done(26-03-10 21:48)
 ✔ Create item profile modal/popup @done(26-03-10 23:39)
   ☐ Show associated/related items
-  ☐ Display physical description
+  ✔ Display physical description @done(26-03-26 09:43)
   ✔ Show item image/photo @done(26-03-10 23:39)
   ✔ Add layman's terms description @done(26-03-10 23:39)
-  ☐ List common use case scenarios
+  ✔ List common use case scenarios @done(26-03-26 09:43)
   ☐ Show similar/alternative items
   ✔ Include usage instructions @done(26-03-10 23:39)
 
@@ -118,3 +118,6 @@
 - Font: `monofonto rg.otf`
 - Network access currently disabled
 - All static files in `/static/` directory
+
+
+✔ Custom Search function - put in barcode and beep when found. @done(26-03-26 09:42)

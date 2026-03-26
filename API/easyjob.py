@@ -59,6 +59,7 @@ def _headers() -> Dict[str, str]:
 def _request(method: str, path: str, **kwargs):
     # Makes a request, auto-reauthenticates on 401
     url = f"{BASE_URL}{path}"
+    _log(f"-> {method} {url}")
     try:
         response = requests.request(method, url, headers=_headers(), timeout=TIMEOUT, verify=VERIFY_CERT, **kwargs)
         if response.status_code == 401:
@@ -137,9 +138,39 @@ def get_all_items(searchtext: str = ""):
     return _get("/api.json/Items/List/")
 
 def get_all_items_full():
-    # Returns complete EJ item catalogue with all fields needed for sync.
-    # type=view includes non-barcoded items; style=List gives flat list.
-    return _get("/api.json/Items/List/?searchtext=*&type=view&style=List&IdUserFilter=0")
+    # EJ caps results per request, so sweep A-Z + 0-9 to paginate the full catalogue.
+    # Tries "*<UK> X*" first (CT naming convention); falls back to plain "*X*" if that returns nothing.
+    import string
+    chars    = string.ascii_uppercase + string.digits + "_-"
+    seen_ids = set()
+
+    def _sweep(pattern):
+        results = []
+        for char in chars:
+            searchtext = pattern.format(char)
+            encoded    = quote(searchtext, safe="*<>")
+            try:
+                batch = _get(f"/api.json/Items/List/?searchtext={encoded}&type=view&style=List&IdUserFilter=0")
+            except Exception:
+                continue
+            if not isinstance(batch, list):
+                continue
+            for item in batch:
+                item_id = item.get("IdStockType") or item.get("Id")
+                if item_id not in seen_ids:
+                    seen_ids.add(item_id)
+                    results.append(item)
+        return results
+
+    # Try UK-tagged sweep first
+    all_items = _sweep("*<UK> {}*")
+
+    # Fall back to plain sweep if nothing came back
+    if not all_items:
+        _log("UK-tagged sweep returned nothing — falling back to plain *X* sweep")
+        all_items = _sweep("*{}*")
+
+    return all_items
 
 def get_item_details(item_id: int):
     # Returns detailed info for a single item, including RentalInventory (total active owned count)
@@ -178,11 +209,13 @@ def get_device_info(device_barcode: str, debug: bool = False):
         _log(f"Response: {result}")
     return result
 
-def get_calendar(start_date: str, days: int = 35):
+def get_calendar(start_date: str, days: int = 14):
     # Fetch calendar entries from EJ dashboard.
     # start_date: "YYYY-MM-DD", days: how many days ahead to fetch.
     return _get(f"/api.json/dashboard/calendar/?days={days}&startdate={start_date}")
-    # Returns all individual devices for a given item type (used for stock counts)
+
+def get_device_list(item_id, search_text: str = ""):
+    # Returns all individual devices for a given item type (used to check if individually barcoded)
     return _get(f"/api.json/Items/DeviceList/?id={item_id}&searchtext={search_text}")
 
 def get_job_info(search_name: str):
@@ -190,6 +223,10 @@ def get_job_info(search_name: str):
     # URL-encodes the search term to handle special characters
     encoded = quote(f"*{search_name}", safe="*")
     return _get(f"/api.json/Jobs/List/?style=List&searchtext={encoded}")
+
+def get_job_details(job_id: int):
+    # Returns full job details including DayTimeOut, DayTimeIn, JobState, etc.
+    return _get(f"/api.json/Jobs/Details/?id={job_id}")
 
 def test_connection():
     # Quick check - returns server info if token is valid

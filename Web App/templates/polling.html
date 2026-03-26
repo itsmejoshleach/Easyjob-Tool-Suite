@@ -90,7 +90,24 @@
                 <p class="mb-1 small">
                     Status: <strong>{{ w.last_status or "Unknown" }}</strong>
                     {% if w.last_locked %}<span class="badge bg-secondary ms-1">Locked</span>{% endif %}
+                    {% if w.shipping_status %}
+                        {% if w.shipping_status == "Upcoming" %}
+                        <span class="badge bg-secondary ms-1"><i class="fa-solid fa-calendar me-1"></i>Upcoming</span>
+                        {% elif w.shipping_status == "Shipped" %}
+                        <span class="badge bg-primary ms-1"><i class="fa-solid fa-truck me-1"></i>Shipped</span>
+                        {% elif w.shipping_status == "Past Return Date" %}
+                        <span class="badge bg-warning text-dark ms-1"><i class="fa-solid fa-clock me-1"></i>Past Return Date</span>
+                        {% elif w.shipping_status == "Returned" %}
+                        <span class="badge bg-success ms-1"><i class="fa-solid fa-circle-check me-1"></i>Returned</span>
+                        {% endif %}
+                    {% endif %}
                 </p>
+                {% if w.day_time_out or w.day_time_in %}
+                <p class="mb-1 text-secondary small">
+                    {% if w.day_time_out %}<i class="fa-solid fa-arrow-right me-1"></i>Out: {{ w.day_time_out[:10] }}{% endif %}
+                    {% if w.day_time_in %}&nbsp;&nbsp;<i class="fa-solid fa-arrow-left me-1"></i>In: {{ w.day_time_in[:10] }}{% endif %}
+                </p>
+                {% endif %}
                 {% if w.last_changed %}
                 <p class="mb-0 text-warning small">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i> Changed {{ w.last_changed }}
@@ -107,6 +124,22 @@
                     <input type="hidden" name="job_no" value="{{ w.job_no }}">
                     <button class="btn btn-sm btn-outline-warning">
                         <i class="fa-solid fa-check me-1"></i> Mark Seen
+                    </button>
+                </form>
+                {% endif %}
+                {% if w.returned %}
+                <form method="POST" action="{{ url_for('polling_mark_returned') }}">
+                    <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                    <input type="hidden" name="undo" value="1">
+                    <button class="btn btn-sm btn-outline-secondary">
+                        <i class="fa-solid fa-rotate-left me-1"></i> Undo Returned
+                    </button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('polling_mark_returned') }}">
+                    <input type="hidden" name="job_no" value="{{ w.job_no }}">
+                    <button class="btn btn-sm btn-outline-success">
+                        <i class="fa-solid fa-circle-check me-1"></i> Mark Returned
                     </button>
                 </form>
                 {% endif %}
@@ -226,9 +259,10 @@ function renderCalendar(d) {
             <div class="d-flex justify-content-between align-items-center mb-1 p-2"
                  style="background:rgba(25,200,120,0.08); border-radius:8px; border:1px solid rgba(25,200,120,0.2);">
                 <div>
-                    <strong style="color:#20c997;">${escHtml(e.caption)}</strong>
+                    <strong style="color:#20c997;">${escHtml(e.title)}</strong>
                     <span class="text-secondary ms-2 small">${escHtml(e.start)}${e.end && e.end !== e.start ? ' → ' + escHtml(e.end) : ''}</span>
-                    ${e.type ? '<span class="badge ms-2" style="background:rgba(255,255,255,0.1);color:#aaa;font-weight:400;">'+escHtml(e.type)+'</span>' : ''}
+                    ${e.type ? `<span class="badge ms-1" style="background:rgba(255,255,255,0.1);color:#aaa;font-weight:400;">${escHtml(e.type)}</span>` : ''}
+                    ${e.role ? `<span class="badge ms-1" style="background:rgba(255,255,255,0.06);color:#888;font-weight:400;">${escHtml(e.role)}</span>` : ''}
                 </div>
                 <button class="btn btn-sm btn-outline-secondary ms-3" onclick="dismissEntry('${escHtml(e.id)}')">
                     <i class="fa-solid fa-xmark"></i>
@@ -248,15 +282,18 @@ function renderCalendar(d) {
         ? entries.length + ' entries tracked in the next 35 days'
         : 'No entries tracked yet — click Check Now to fetch.';
 
-    // Sort by start date
-    entries.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    // Sort by raw start date
+    entries.sort((a, b) => (a.start_raw || '').localeCompare(b.start_raw || ''));
 
     allEl.innerHTML = entries.map(e => `
         <div class="col-md-6 col-lg-4">
-            <div class="p-2" style="background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem;">
-                <div class="text-white fw-semibold">${escHtml(e.caption)}</div>
-                <div class="text-secondary">${escHtml(e.start)}${e.end && e.end !== e.start ? ' → ' + escHtml(e.end) : ''}</div>
-                ${e.type ? '<div><span class="badge" style="background:rgba(255,255,255,0.08);color:#aaa;font-weight:400;font-size:0.72rem;">'+escHtml(e.type)+'</span></div>' : ''}
+            <div class="p-2" style="background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem; border-left: 3px solid ${escHtml(e.color) || 'rgba(255,255,255,0.15)'};">
+                <div class="text-white fw-semibold">${escHtml(e.title)}</div>
+                <div class="text-secondary" style="font-size:0.78rem;">${escHtml(e.start)}${e.end && e.end !== e.start ? ' → ' + escHtml(e.end) : ''}</div>
+                <div class="mt-1">
+                    ${e.type ? `<span class="badge me-1" style="background:rgba(255,255,255,0.08);color:#aaa;font-weight:400;font-size:0.7rem;">${escHtml(e.type)}</span>` : ''}
+                    ${e.role ? `<span class="badge" style="background:rgba(255,255,255,0.05);color:#777;font-weight:400;font-size:0.7rem;">${escHtml(e.role)}</span>` : ''}
+                </div>
             </div>
         </div>
     `).join('');

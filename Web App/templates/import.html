@@ -1,0 +1,268 @@
+{% extends "base_layout.html" %}
+{% block title %}Import Items{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4 text-white">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">One-Time Item Import</h2>
+            <p class="text-secondary mb-0 mt-1" style="font-size:0.85rem;">
+                Paste your <code>ej_items.json</code> below. Each item will be checked against
+                EasyJob's DeviceList to determine if it's individually barcoded or not.
+            </p>
+        </div>
+    </div>
+
+    <!-- PASTE AREA — hidden once running -->
+    <div id="inputSection">
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label text-secondary mb-0">JSON Data</label>
+                <button class="btn btn-sm btn-outline-secondary" id="fetchBtn" onclick="fetchFromEJ()">
+                    <i class="fa-solid fa-cloud-arrow-down me-1"></i> Fetch from EasyJob
+                </button>
+            </div>
+            <textarea id="jsonInput" class="form-control font-monospace"
+                      rows="12"
+                      placeholder='Click "Fetch from EasyJob" to load automatically, or paste JSON here manually.'
+                      style="font-size:0.78rem; background:rgba(255,255,255,0.04); color:#e0e0e0; border-color:rgba(255,255,255,0.15); resize:vertical;"></textarea>
+            <div id="fetchStatus" class="text-secondary mt-1" style="font-size:0.78rem;"></div>
+        </div>
+
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-primary px-4" onclick="startImport()">
+                <i class="fa-solid fa-file-import me-2"></i> Start Import
+            </button>
+            <span id="inputError" class="text-danger small"></span>
+        </div>
+    </div>
+
+    <!-- PROGRESS — shown once running -->
+    <div id="progressSection" style="display:none;">
+
+        <div class="d-flex justify-content-between mb-1">
+            <span class="text-secondary small" id="progressLabel">Starting…</span>
+            <span class="text-secondary small" id="progressPct">0%</span>
+        </div>
+
+        <div class="progress mb-3" style="height:10px; background:rgba(255,255,255,0.08);">
+            <div id="progressBar" class="progress-bar bg-primary" role="progressbar"
+                 style="width:0%; transition:width 0.4s ease;"></div>
+        </div>
+
+        <!-- Live counters -->
+        <div class="d-flex gap-4 mb-4" style="font-size:0.85rem;">
+            <div>
+                <span class="text-secondary">Added</span><br>
+                <strong id="cntAdded" class="text-white fs-5">0</strong>
+            </div>
+            <div>
+                <span class="text-secondary">Barcoded (no label)</span><br>
+                <strong id="cntBarcoded" class="text-warning fs-5">0</strong>
+            </div>
+            <div>
+                <span class="text-secondary">Non-barcoded (label generated)</span><br>
+                <strong id="cntUnbarcoded" class="text-success fs-5">0</strong>
+            </div>
+            <div>
+                <span class="text-secondary">Skipped (already exist)</span><br>
+                <strong id="cntSkipped" class="text-secondary fs-5">0</strong>
+            </div>
+            <div>
+                <span class="text-secondary">Errors</span><br>
+                <strong id="cntErrors" class="text-danger fs-5">0</strong>
+            </div>
+        </div>
+
+        <!-- Done banner -->
+        <div id="doneBanner" style="display:none;"
+             class="alert alert-success d-flex align-items-center gap-2 mb-3">
+            <i class="fa-solid fa-circle-check"></i>
+            <span id="doneText"></span>
+        </div>
+
+        <!-- Error log -->
+        <div id="errorLog" style="display:none;">
+            <p class="text-danger small mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i> Errors:</p>
+            <ul id="errorList" class="text-danger small" style="max-height:200px; overflow-y:auto;"></ul>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _importPoll = null;
+
+// If an import was already running when page loaded, resume watching it
+{% if status and status.running %}
+showProgress();
+startPolling();
+{% elif status and not status.running and status.done_at %}
+showProgress();
+applyStatus({{ status | tojson }});
+{% endif %}
+
+function fetchFromEJ() {
+    const btn    = document.getElementById('fetchBtn');
+    const status = document.getElementById('fetchStatus');
+    btn.disabled       = true;
+    btn.innerHTML      = '<i class="fa-solid fa-rotate fa-spin me-1"></i> Fetching\u2026';
+    status.style.color = '#6c757d';
+    status.textContent = 'Connecting to EasyJob\u2026';
+
+    fetch('/import/fetch_from_ej', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.already_running || d.started) {
+                pollFetchStatus();
+            } else {
+                fetchError(d.error || 'Unknown error');
+            }
+        })
+        .catch(err => fetchError(err));
+}
+
+function pollFetchStatus() {
+    const status = document.getElementById('fetchStatus');
+    status.textContent = 'Fetching items from EasyJob\u2026';
+
+    const poll = setInterval(() => {
+        fetch('/import/fetch_status')
+            .then(r => r.json())
+            .then(d => {
+                if (d.running) {
+                    document.getElementById('fetchStatus').textContent = 'Fetching items from EasyJob\u2026';
+                    return;
+                }
+
+                clearInterval(poll);
+                const btn = document.getElementById('fetchBtn');
+                btn.disabled  = false;
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down me-1"></i> Fetch from EasyJob';
+
+                if (d.error) {
+                    fetchError(d.error);
+                    return;
+                }
+
+                if (!d.items || d.items.length === 0) {
+                    fetchError('No items returned — check EasyJob connection and search term.');
+                    return;
+                }
+
+                document.getElementById('jsonInput').value = JSON.stringify(d.items, null, 2);
+                const status = document.getElementById('fetchStatus');
+                status.style.color = '#20c997';
+                status.textContent = d.count + ' UK items loaded. Click Start Import when ready.';
+            })
+            .catch(err => { clearInterval(poll); fetchError('Poll failed: ' + err); });
+    }, 2000);
+}
+
+function fetchError(msg) {
+    const btn    = document.getElementById('fetchBtn');
+    const status = document.getElementById('fetchStatus');
+    btn.disabled       = false;
+    btn.innerHTML      = '<i class="fa-solid fa-cloud-arrow-down me-1"></i> Fetch from EasyJob';
+    status.style.color = '#dc3545';
+    status.textContent = 'Error: ' + msg;
+}
+
+// Resume polling if a fetch was already running when page loaded
+{% if fetch_running %}
+pollFetchStatus();
+{% endif %}
+
+function startImport() {
+    const raw = document.getElementById('jsonInput').value.trim();
+    const err = document.getElementById('inputError');
+    err.textContent = '';
+
+    if (!raw) { err.textContent = 'Please paste JSON data first.'; return; }
+
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch(e) { err.textContent = 'Invalid JSON: ' + e.message; return; }
+
+    if (!Array.isArray(parsed)) { err.textContent = 'Expected a JSON array.'; return; }
+
+    fetch('/import/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'json_data=' + encodeURIComponent(raw)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { document.getElementById('inputError').textContent = d.error; return; }
+        showProgress();
+        startPolling();
+    })
+    .catch(e => { document.getElementById('inputError').textContent = 'Request failed: ' + e; });
+}
+
+function showProgress() {
+    document.getElementById('inputSection').style.display  = 'none';
+    document.getElementById('progressSection').style.display = '';
+}
+
+function startPolling() {
+    if (_importPoll) return;
+    _importPoll = setInterval(() => {
+        fetch('/import/status')
+            .then(r => r.json())
+            .then(d => {
+                applyStatus(d);
+                if (!d.running) {
+                    clearInterval(_importPoll);
+                    _importPoll = null;
+                }
+            })
+            .catch(() => {});
+    }, 2000);
+}
+
+function applyStatus(d) {
+    const processed = d.processed || 0;
+    const total     = d.total     || 1;
+    const pct       = Math.round((processed / total) * 100);
+
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressLabel').textContent =
+        d.running
+            ? processed + ' / ' + total + ' checked\u2026'
+            : 'Complete — ' + processed + ' / ' + total + ' processed';
+
+    document.getElementById('cntAdded').textContent     = d.added      || 0;
+    document.getElementById('cntBarcoded').textContent  = d.barcoded   || 0;
+    document.getElementById('cntUnbarcoded').textContent= d.unbarcoded || 0;
+    document.getElementById('cntSkipped').textContent   = d.skipped    || 0;
+    document.getElementById('cntErrors').textContent    = (d.errors && d.errors.length) || 0;
+
+    if (!d.running && d.done_at) {
+        const banner = document.getElementById('doneBanner');
+        banner.style.display = '';
+        document.getElementById('doneText').textContent =
+            'Import complete at ' + d.done_at + '. '
+            + d.added + ' items added (' + d.barcoded + ' barcoded, '
+            + d.unbarcoded + ' labels generated). '
+            + d.skipped + ' already existed.';
+    }
+
+    if (d.errors && d.errors.length > 0) {
+        document.getElementById('errorLog').style.display = '';
+        const list = document.getElementById('errorList');
+        list.innerHTML = '';
+        d.errors.forEach(e => {
+            const li = document.createElement('li');
+            li.textContent = e;
+            list.appendChild(li);
+        });
+    }
+}
+</script>
+{% endblock %}

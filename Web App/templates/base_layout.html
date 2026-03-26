@@ -46,6 +46,12 @@
             <a class="nav-link {% if page=='custom' %}active{% endif %}" href="{{ url_for('custom_barcodes') }}">
                 <i class="fa-solid fa-barcode me-2"></i> Custom Barcodes
             </a>
+            <a class="nav-link {% if page=='barcode_scan' %}active{% endif %}" href="{{ url_for('barcode_scan') }}">
+                <i class="fa-solid fa-crosshairs me-2"></i> Barcode Finder
+            </a>
+            <a class="nav-link {% if page=='import' %}active{% endif %}" href="{{ url_for('import_page') }}">
+                <i class="fa-solid fa-file-import me-2"></i> Import Items
+            </a>
         </nav>
 
         <div class="mt-auto">
@@ -58,7 +64,7 @@
             </div>
 
             <div class="text-secondary small">
-                Made for internal CT (Creative Technology Group) Intranet usage. By Josh Leach.
+                Made for internal CT (Creative Technology Group) Intranet usage
             </div>
         </div>
     </aside>
@@ -74,11 +80,7 @@
 
 <footer class="text-center mt-5">
     <hr class="border-secondary">
-    <p class="mb-1">
-        Any questions, please get in touch:
-        (<a href="mailto:jleach@ctlondon.com">jleach@ctlondon.com</a> /
-        <a href="mailto:josh@itsmejoshleach.co.uk">josh@itsmejoshleach.co.uk</a>)
-    </p>
+    <p class="mb-1">Any questions &mdash; contact Josh Leach (jleach at ctlondon.com)</p>
     <p class="mb-1">&copy; itsmejoshleach 2025 - 2026</p>
 </footer>
 
@@ -87,7 +89,6 @@
 <script>
 let _syncPoll = null;
 
-// On page load — check if a sync is already running or show last sync time
 fetch('/sync_status')
     .then(r => r.json())
     .then(d => {
@@ -104,7 +105,7 @@ function runSync() {
     fetch('/sync_items', { method: 'POST' })
         .then(r => r.json())
         .then(d => {
-            if (d.already_running) return; // already going, ignore
+            if (d.already_running) return;
             setSyncRunning();
             startPolling();
         })
@@ -125,7 +126,6 @@ function startPolling() {
         fetch('/sync_status')
             .then(r => r.json())
             .then(d => {
-                // Show live progress
                 if (d.total) {
                     document.getElementById('syncStatus').textContent =
                         d.processed + ' / ' + d.total + ' processed\u2026';
@@ -140,7 +140,7 @@ function startPolling() {
                 }
             })
             .catch(() => {});
-    }, 2000); // poll every 2 seconds
+    }, 2000);
 }
 
 function showSyncDone(d) {

@@ -53,3 +53,7 @@ combined_output.py
 combined_output.txt
 job_watchers.json
 item_profiles.json
+calendar_watch.json
+ej_items.json
+fetch_status.json
+ej_export.json
