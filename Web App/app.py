@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from API import easyjob as ej
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB — handles large EJ item exports
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB - handles large EJ item exports
 
 
 # -- Config --
@@ -49,7 +49,7 @@ for d in [BARCODE_DIR, LABEL_DIR, CUSTOM_BARCODE_DIR, CUSTOM_LABEL_DIR]:
 
 # -- Utils --
 
-def mm_to_px(mm):
+def mm_to_px(mm): # Convert mm to px based on DPI
     return int((mm / 25.4) * DPI)
 
 LABEL_WIDTH  = mm_to_px(LABEL_WIDTH_MM)
@@ -57,16 +57,15 @@ LABEL_HEIGHT = mm_to_px(LABEL_HEIGHT_MM)
 PADDING      = mm_to_px(PADDING_MM)
 TEXT_HEIGHT  = int(LABEL_HEIGHT * TEXT_HEIGHT_FRACTION)
 
-def sanitize_filename(name):
+def sanitize_filename(name): # Remove invalid chars
     return re.sub(r'[\\/:*?"<>| ]+', '_', name).strip()
 
-def ensure_csv(path, columns):
+def ensure_csv(path, columns): # Check if csv file exists
     if not os.path.exists(path):
         with open(path, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(columns)
 
-def ej_login() -> bool:
-    # Attempt EasyJob login, return True if successful
+def ej_login() -> bool: # Attempt EasyJob login, return True if successful
     try:
         if not ej.TOKEN:
             ej.quick_login()
@@ -77,22 +76,22 @@ def ej_login() -> bool:
 
 # -- Load Items --
 
-def load_profiles():
+def load_profiles(): # Load item profiles
     if not os.path.exists(PROFILES_FILE):
         return {}
     with open(PROFILES_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_profiles(profiles):
+def save_profiles(profiles): # save item profiles
     with open(PROFILES_FILE, "w", encoding="utf-8") as f:
         json.dump(profiles, f, indent=2, ensure_ascii=False)
 
-def wildcard_to_regex(query):
+def wildcard_to_regex(query): # Convert wildcard to regex
     return re.escape(query).replace("\\*", ".*")
 
 PAGE_SIZE = 25
 
-def load_items(query="", page=1):
+def load_items(query="", page=1): # Load items with search and pagination
     ensure_csv(ITEMS_CSV, CSV_COLUMNS)
     df = pd.read_csv(ITEMS_CSV, dtype=str).fillna("")
     df["Item Name"] = df["Item Name"].str.strip()
@@ -130,7 +129,7 @@ def load_items(query="", page=1):
         })
     return items, total, page, total_pages
 
-def load_custom_barcodes(query=""):
+def load_custom_barcodes(query=""): # load custom barcodes
     ensure_csv(CUSTOM_CSV, CUSTOM_COLUMNS)
     df = pd.read_csv(CUSTOM_CSV, dtype=str).fillna("")
     df["Name"]    = df["Name"].str.strip()
@@ -162,7 +161,7 @@ def load_custom_barcodes(query=""):
 
 # -- Barcode / Label Generation --
 
-def generate_barcode(barcode, name, custom=False):
+def generate_barcode(barcode, name, custom=False): # Generate barcode
     safe     = sanitize_filename(name)
     dir_path = CUSTOM_BARCODE_DIR if custom else BARCODE_DIR
     path     = os.path.join(dir_path, f"{safe}.png")
@@ -172,7 +171,7 @@ def generate_barcode(barcode, name, custom=False):
         f.write(r.content)
     return path
 
-def create_label(barcode_img_path, name, custom=False):
+def create_label(barcode_img_path, name, custom=False): # take barcode and text and create label
     safe     = sanitize_filename(name)
     dir_path = CUSTOM_LABEL_DIR if custom else LABEL_DIR
     out_path = os.path.join(dir_path, f"{safe}_label.png")
@@ -205,7 +204,7 @@ def create_label(barcode_img_path, name, custom=False):
 # -- Routes --
 
 @app.route("/", methods=["GET", "POST"])
-def index():
+def index(): # Home page with item search and pagination
     if request.method == "POST":
         query = request.form.get("search", "").strip()
         page  = 1
@@ -221,7 +220,7 @@ def index():
 
 
 @app.route("/item_profile", methods=["GET"])
-def item_profile():
+def item_profile(): # GET endpoint for fetching item profile data
     # Returns JSON profile for the More Info modal.
     # Resolves item name → EJ item ID → details + accessories, then generates
     # AI description and how-to via Claude API.
@@ -273,7 +272,7 @@ def item_profile():
                             for a in acc if a.get("Caption")
                         ]
                     else:
-                        profile["accessories_debug"] = f"Unexpected response type: {type(acc).__name__} — {str(acc)[:200]}"
+                        profile["accessories_debug"] = f"Unexpected response type: {type(acc).__name__} - {str(acc)[:200]}"
                 else:
                     profile["accessories_debug"] = f"Could not find item ID in ej_details keys: {list(profile['ej_details'].keys())}"
             except Exception as e:
@@ -285,7 +284,7 @@ def item_profile():
     details     = profile["ej_details"] or {}
     ej_comment  = details.get("Comment", "").strip()
 
-    # Use explicit None checks — empty string is a valid saved value and must not fall through
+    # Use explicit None checks - empty string is a valid saved value and must not fall through
     desc = saved["description"] if "description" in saved else (ej_comment or "")
     profile["ai_content"] = {
         "description": desc,
@@ -297,7 +296,7 @@ def item_profile():
 
 
 @app.route("/save_profile", methods=["POST"])
-def save_profile():
+def save_profile(): # POST endpoint for saving item profile data from More Info popup
     data = request.get_json()
     if not data or not data.get("name"):
         return jsonify({"error": "Missing item name"}), 400
@@ -313,7 +312,7 @@ def save_profile():
     return jsonify({"ok": True})
 
 @app.route("/add", methods=["POST"])
-def add_item():
+def add_item(): # Add new item from form submission
     name    = request.form.get("name", "").strip()
     desc    = request.form.get("description", "").strip()
     barcode = request.form.get("barcode", "").strip()
@@ -330,7 +329,7 @@ def add_item():
 # -- Custom Barcodes --
 
 @app.route("/custom_barcodes", methods=["GET", "POST"])
-def custom_barcodes():
+def custom_barcodes(): # Page for managing custom barcodes
     query = ""
     if request.method == "POST":
         query = request.form.get("search", "").strip()
@@ -349,7 +348,7 @@ def custom_barcodes():
     return render_template("custom_barcodes.html", items=items, query=query, page="custom")
 
 @app.route("/add_custom_barcode", methods=["POST"])
-def add_custom_barcode():
+def add_custom_barcode(): # Add new custom barcode from form submission
     name    = request.form.get("name", "").strip()
     barcode = request.form.get("barcode", "").strip()
     if not name or not barcode:
@@ -365,7 +364,7 @@ def add_custom_barcode():
 # -- Edit Item --
 
 @app.route("/edit_item", methods=["POST"])
-def edit_item():
+def edit_item(): # Edit existing item
     original_name = request.form.get("original_name", "").strip()
     new_name      = request.form.get("name", "").strip()
     new_desc      = request.form.get("description", "").strip()
@@ -406,7 +405,7 @@ def edit_item():
 # -- Delete Label --
 
 @app.route("/delete_label", methods=["POST"])
-def delete_label():
+def delete_label(): # Delete item and associated files
     filepath  = request.form.get("filepath", "")
     page_type = request.form.get("page_type", "items")
     if not filepath:
@@ -439,13 +438,13 @@ def delete_label():
 
 # -- Stock Check --
 
-def _unwrap(data):
+def _unwrap(data): # List (dict) -> dict
     # EJ API sometimes returns a list with one dict instead of a dict directly
     if isinstance(data, list):
         return data[0] if data else None
     return data
 
-def _get_total_owned(item_id):
+def _get_total_owned(item_id): # What it says on the tin - read the below comments for more info.
     # Use RentalInventory from Items/Details - this is the active owned count EJ UI shows.
     # Fallback: DeviceList with inactive exclusion set if Details doesn't have the field.
     try:
@@ -476,7 +475,7 @@ def _get_total_owned(item_id):
 
     return None
 
-def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None):
+def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None): # Parse availability data from EJ and return a normalized dict with stock info.
     # Build normalised stock dict from EJ Items/Avail response.
     # Avail endpoint known response shapes:
     #   { "Inventory": 701, "CalcDay": "..." }        - available qty only (this EJ instance)
@@ -525,7 +524,7 @@ def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None):
             "item_details_raw": item_details_raw
         }
 
-    # ## Unknown format — surface raw without crashing
+    # ## Unknown format - surface raw without crashing
     return {
         "name":      name,
         "item_id":   item_id,
@@ -537,7 +536,7 @@ def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None):
     }
 
 @app.route("/stock_check", methods=["GET", "POST"])
-def stock_check():
+def stock_check(): # Stock check page
     result    = None    # single item result (barcode / item_id search)
     results   = None    # multiple item results (name search)
     error     = None
@@ -562,7 +561,7 @@ def stock_check():
                 # Plain integer            →  10934        (EJ internal item ID)
                 # Everything else          →  name search  (wraps in wildcards automatically)
                 #
-                # All routes resolve to stock-type level — never a specific device.
+                # All routes resolve to stock-type level - never a specific device.
 
                 IS_SPECIFIC_BARCODE = re.match(r'^[A-Za-z0-9]+/\d+$', query)
                 IS_SI_BARCODE       = re.match(r'^@?si\d+$', query, re.IGNORECASE)
@@ -571,7 +570,7 @@ def stock_check():
                 IS_EJ_ID            = re.match(r'^\d+$', query)
 
                 if IS_SPECIFIC_BARCODE or IS_SI_BARCODE:
-                    # Full device barcode — resolve to stock type via BarcodeSearch
+                    # Full device barcode - resolve to stock type via BarcodeSearch
                     device_info = ej.get_device_info(query)
                     if not device_info:
                         error = f"No device found for barcode '{query}'."
@@ -589,7 +588,7 @@ def stock_check():
                                 error = f"No availability data for '{name}'."
 
                 elif IS_EJ_ID and not IS_EJ_NUMBER:
-                    # Plain integer — try direct item ID first, fall back to @si barcode search.
+                    # Plain integer - try direct item ID first, fall back to @si barcode search.
                     # Can't distinguish 10934 (item ID) from 94884 (@si number) by pattern alone.
                     item_details = _unwrap(ej.get_item_details(int(query)))
                     if item_details and item_details.get("ID") or item_details and item_details.get("Id"):
@@ -600,7 +599,7 @@ def stock_check():
                         if not result:
                             error = f"No availability data for item ID {query}."
                     else:
-                        # Not a valid item ID — try as bare @si number
+                        # Not a valid item ID - try as bare @si number
                         device_info = ej.get_device_info(f"@si{query}")
                         if not device_info:
                             error = f"Nothing found for '{query}'. Try a name, barcode, or EJ item number."
@@ -663,7 +662,7 @@ def stock_check():
 
 # -- Job Watching --
 
-def load_watchers():
+def load_watchers(): # Load job watchers from JSON file
     if not os.path.exists(WATCHERS_FILE):
         return []
     try:
@@ -672,24 +671,24 @@ def load_watchers():
     except Exception:
         return []
 
-def save_watchers(watchers):
+def save_watchers(watchers): # Save job watchers to JSON file
     with open(WATCHERS_FILE, "w") as f:
         json.dump(watchers, f, indent=2)
 
 CALENDAR_FILE = "./calendar_watch.json"
 
-def load_calendar_watch():
+def load_calendar_watch(): # Load calendar watch data from JSON file
     if not os.path.exists(CALENDAR_FILE):
         return {"entries": {}, "last_checked": None, "new_entries": [], "errors": []}
     with open(CALENDAR_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_calendar_watch(data):
+def save_calendar_watch(data): # Save calendar watch data to JSON file
     with open(CALENDAR_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def _format_ej_date(raw: str) -> str:
-    # EJ dates look like "2026-03-16T09:00:00.0000000" — strip to first 19 chars to ignore fractional seconds
+def _format_ej_date(raw: str) -> str: # Format EJ date string into readable format
+    # EJ dates look like "2026-03-16T09:00:00.0000000" - strip to first 19 chars to ignore fractional seconds
     if not raw:
         return ""
     try:
@@ -705,7 +704,7 @@ def _format_ej_date(raw: str) -> str:
     except ValueError:
         return raw
 
-def _parse_caption(caption: str):
+def _parse_caption(caption: str): # Parse job caption into type and role
     # "Prep | Trainee Prep"  →  type="Prep",     role="Trainee Prep"
     # "LED | LED Engineer"   →  type="LED",      role="LED Engineer"
     # "Edays - External"     →  type="Edays - External", role=None
@@ -714,10 +713,10 @@ def _parse_caption(caption: str):
         return parts[0], parts[1]
     return caption.strip(), None
 
-def _entry_key(entry):
+def _entry_key(entry): # Generate a unique key for calendar entry
     return str(entry.get("Id") or f"{entry.get('Caption','')}|{entry.get('StartDate','')}")
 
-def _entry_summary(entry):
+def _entry_summary(entry): # Generate a summary dict for a calendar
     caption   = (entry.get("Caption")     or "").strip()
     post      = (entry.get("PostCaption") or "").strip()
     raw_start = entry.get("StartDate") or ""
@@ -726,7 +725,7 @@ def _entry_summary(entry):
     job_type, role = _parse_caption(caption)
 
     # Use PostCaption as the title only if it looks like a real job name
-    # (contains a space or is long enough to be meaningful — not just "Approved" etc.)
+    # (contains a space or is long enough to be meaningful - not just "Approved" etc.)
     use_post = post and (len(post) > 12 or " " in post)
     title    = post if use_post else caption
 
@@ -741,8 +740,8 @@ def _entry_summary(entry):
         "start_raw": raw_start,
     }
 
-def refresh_calendar_watch():
-    # Called by the background poll — fetches 35 days from today, diffs against stored entries.
+def refresh_calendar_watch(): # Fetch calendar entries from EJ and update the watch list
+    # Called by the background poll - fetches 35 days from today, diffs against stored entries.
     data = load_calendar_watch()
     if not ej_login():
         data["errors"] = ["EasyJob not configured"]
@@ -764,7 +763,7 @@ def refresh_calendar_watch():
         save_calendar_watch(data)
         return
 
-    # Rebuild fresh each refresh — don't accumulate stale entries from previous runs
+    # Rebuild fresh each refresh - don't accumulate stale entries from previous runs
     known    = {}
     new_ones = []
     today    = datetime.now().date()
@@ -773,7 +772,7 @@ def refresh_calendar_watch():
     for entry in raw:
         caption = (entry.get("Caption") or "").lower()
 
-        # Only track job entries — skip Edays, holidays, and other non-job calendar items
+        # Only track job entries - skip Edays, holidays, and other non-job calendar items
         if not ("prep" in caption or "on site" in caption or "onsite" in caption):
             continue
 
@@ -804,16 +803,16 @@ def refresh_calendar_watch():
 
 
 @app.route("/calendar_watch/refresh", methods=["POST"])
-def calendar_watch_refresh():
+def calendar_watch_refresh(): # Endpoint to trigger calendar refresh
     threading.Thread(target=refresh_calendar_watch, daemon=True).start()
     return jsonify({"started": True})
 
 @app.route("/calendar_watch/status", methods=["GET"])
-def calendar_watch_status():
+def calendar_watch_status(): # Endpoint to get current calendar watch status
     return jsonify(load_calendar_watch())
 
 @app.route("/calendar_watch/dismiss", methods=["POST"])
-def calendar_watch_dismiss():
+def calendar_watch_dismiss(): # Endpoint to dismiss a single calendar entry
     entry_id = request.form.get("entry_id", "").strip()
     data     = load_calendar_watch()
     data["new_entries"] = [e for e in data.get("new_entries", []) if e["id"] != entry_id]
@@ -821,7 +820,7 @@ def calendar_watch_dismiss():
     return jsonify({"ok": True})
 
 @app.route("/calendar_watch/dismiss_all", methods=["POST"])
-def calendar_watch_dismiss_all():
+def calendar_watch_dismiss_all(): # Endpoint to dismiss all calendar entries
     data = load_calendar_watch()
     data["new_entries"] = []
     save_calendar_watch(data)
@@ -829,19 +828,19 @@ def calendar_watch_dismiss_all():
 
 
 @app.route("/polling")
-def polling():
+def polling(): # Endpoint to display polling page
     watchers = load_watchers()
     ej_ok    = ej_login()
     return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="job_watching")
 
-def _shipping_status(day_time_out, day_time_in, returned=False):
+def _shipping_status(day_time_out, day_time_in, returned=False): # Determine shipping status
     # Derive shipping status from DayTimeOut / DayTimeIn.
     # "returned" is a manual flag set by staff via the UI.
     #
-    #   Upcoming          — before DayTimeOut
-    #   Shipped           — past DayTimeOut, before DayTimeIn
-    #   Past Return Date  — past DayTimeIn, not manually marked returned
-    #   Returned          — manually marked returned by staff
+    #   Upcoming          - before DayTimeOut
+    #   Shipped           - past DayTimeOut, before DayTimeIn
+    #   Past Return Date  - past DayTimeIn, not manually marked returned
+    #   Returned          - manually marked returned by staff
     if returned:
         return "Returned"
     if not day_time_out:
@@ -859,7 +858,7 @@ def _shipping_status(day_time_out, day_time_in, returned=False):
     except (ValueError, TypeError):
         return None
 
-def _fetch_watcher_details(job_id, job_no):
+def _fetch_watcher_details(job_id, job_no): # Helper to fetch job details
     # Fetch job details + items for a watcher entry.
     # Returns (job_state_str, day_time_out, day_time_in, items_dict, error_str)
     try:
@@ -895,7 +894,7 @@ def _fetch_watcher_details(job_id, job_no):
 
 
 @app.route("/polling/add", methods=["POST"])
-def polling_add():
+def polling_add(): # Endpoint to add a new job watcher
     job_no = request.form.get("job_no", "").strip()
     label  = request.form.get("label",  "").strip()
     if not job_no:
@@ -946,7 +945,7 @@ def polling_add():
     return redirect(url_for("polling"))
 
 @app.route("/polling/mark_returned", methods=["POST"])
-def polling_mark_returned():
+def polling_mark_returned(): # Endpoint to mark a job as returned 
     job_no   = request.form.get("job_no", "").strip()
     undo     = request.form.get("undo", "0") == "1"
     watchers = load_watchers()
@@ -960,14 +959,14 @@ def polling_mark_returned():
     return redirect(url_for("polling"))
 
 @app.route("/polling/remove", methods=["POST"])
-def polling_remove():
+def polling_remove(): # Endpoint to remove a job watcher
     job_no   = request.form.get("job_no", "").strip()
     watchers = [w for w in load_watchers() if w["job_no"] != job_no]
     save_watchers(watchers)
     return redirect(url_for("polling"))
 
 @app.route("/polling/clear_flag", methods=["POST"])
-def polling_clear_flag():
+def polling_clear_flag(): # Endpoint to clear change flag for a job watcher
     job_no   = request.form.get("job_no", "").strip()
     watchers = load_watchers()
 
@@ -984,7 +983,7 @@ def polling_clear_flag():
     return redirect(url_for("polling"))
 
 @app.route("/polling/refresh", methods=["POST"])
-def polling_refresh():
+def polling_refresh(): # Endpoint to refresh job watcher statuses
     watchers = load_watchers()
     if not ej_login():
         return redirect(url_for("polling"))
@@ -1032,17 +1031,17 @@ def polling_refresh():
 
 SYNC_STATUS_FILE = "./sync_status.json"
 
-def load_sync_status():
+def load_sync_status(): # Load EJ sync status from JSON file
     if not os.path.exists(SYNC_STATUS_FILE):
         return {"last_sync": None, "added": 0, "skipped": 0, "errors": []}
     with open(SYNC_STATUS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_sync_status(status):
+def save_sync_status(status): # Save EJ sync status to JSON file
     with open(SYNC_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def sync_ej_items():
+def sync_ej_items(): # Background worker to sync items from EJ into items.csv
     # Pull full item list from EJ and merge into items.csv.
     #
     # Items WITH devices (individually barcoded):
@@ -1052,7 +1051,7 @@ def sync_ej_items():
     # Items WITHOUT devices (non-barcoded / consumable stock):
     #   → Added to CSV with EJ item number as barcode, label auto-generated.
     #
-    # Existing entries are never overwritten — sync only adds missing items.
+    # Existing entries are never overwritten - sync only adds missing items.
 
     result = {"running": True, "added": 0, "skipped": 0, "total": 0, "processed": 0, "errors": [], "last_sync": None}
     save_sync_status(result)
@@ -1064,7 +1063,7 @@ def sync_ej_items():
         return r
 
     if not ej_login():
-        result["errors"].append("EasyJob not configured — check .env credentials.")
+        result["errors"].append("EasyJob not configured - check .env credentials.")
         return _finish(result)
 
     try:
@@ -1101,10 +1100,10 @@ def sync_ej_items():
         item_id     = item.get("Id") or item.get("ID") or item.get("IdStockType")
 
         if has_devices:
-            # Individually barcoded — no generic barcode/label
+            # Individually barcoded - no generic barcode/label
             new_rows.append([name, desc, "", "", ""])
         else:
-            # Non-barcoded — use EJ item number as barcode and auto-generate label
+            # Non-barcoded - use EJ item number as barcode and auto-generate label
             barcode = ej_number or str(item_id or "")
             if not barcode:
                 new_rows.append([name, desc, "", "", ""])
@@ -1132,7 +1131,7 @@ def sync_ej_items():
 
 
 @app.route("/sync_items", methods=["POST"])
-def sync_items_route():
+def sync_items_route(): # Endpoint to trigger EJ item sync
     status = load_sync_status()
     if status.get("running"):
         return jsonify({"already_running": True})
@@ -1154,19 +1153,17 @@ def sync_status_route():
 
 IMPORT_STATUS_FILE = "./import_status.json"
 
-def load_import_status():
+def load_import_status(): # Load import status from JSON file
     if not os.path.exists(IMPORT_STATUS_FILE):
         return None
     with open(IMPORT_STATUS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_import_status(status):
+def save_import_status(status): # Save import status to JSON file
     with open(IMPORT_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def run_import(items):
-    # Background worker for the one-time JSON import.
-    #
+def run_import(items): # Background worker for the one-time JSON import
     # For each item:
     #   - Calls DeviceList to check if individually barcoded
     #   - Barcoded  → CSV entry with no barcode/label
@@ -1222,7 +1219,7 @@ def run_import(items):
                 save_import_status(status)
             continue
 
-        # Check DeviceList — item is individually barcoded only if devices have InventoryNumber values
+        # Check DeviceList - item is individually barcoded only if devices have InventoryNumber values
         has_devices = False
         try:
             devices     = ej.get_device_list(item_id)
@@ -1233,11 +1230,11 @@ def run_import(items):
             status["errors"].append(f"DeviceList failed for '{name}' (id {item_id}): {e}")
 
         if has_devices:
-            # Individually barcoded (has InventoryNumber like BP2/001) — name + desc only, no barcode/label
+            # Individually barcoded (has InventoryNumber like BP2/001) - name + desc only, no barcode/label
             new_rows.append([name, desc, "", "", ""])
             status["barcoded"] += 1
         else:
-            # Non-barcoded stock — no barcode, no label
+            # Non-barcoded stock - no barcode, no label
             new_rows.append([name, desc, "", "", ""])
             status["unbarcoded"] += 1
 
@@ -1258,7 +1255,7 @@ def run_import(items):
 
 
 @app.route("/import", methods=["GET"])
-def import_page():
+def import_page(): # Endpoint to display the import page with current status
     status       = load_import_status()
     fetch_status = load_fetch_status()
     return render_template("import.html", page="import", status=status, fetch_running=fetch_status.get("running", False))
@@ -1267,31 +1264,31 @@ def import_page():
 FETCH_STATUS_FILE = "./fetch_status.json"
 EJ_EXPORT_FILE    = "./ej_export.json"
 
-# fetch_status.json — metadata only; items live in ej_export.json to avoid huge in-memory JSON
-def load_fetch_status():
+# fetch_status.json - metadata only; items live in ej_export.json to avoid huge in-memory JSON
+def load_fetch_status(): # Load fetch status from JSON file
     if not os.path.exists(FETCH_STATUS_FILE):
         return {"running": False}
     try:
         with open(FETCH_STATUS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, ValueError):
-        return {"running": False}  # empty or corrupt file — treat as fresh
+        return {"running": False}  # empty or corrupt file - treat as fresh
 
-def save_fetch_status(status):
+def save_fetch_status(status): # Save fetch status to JSON file
     with open(FETCH_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def load_ej_export():
+def load_ej_export(): # Load fetched EJ items from JSON file
     if not os.path.exists(EJ_EXPORT_FILE):
         return []
     with open(EJ_EXPORT_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def _run_fetch():
+def _run_fetch(): # Background worker to fetch items from EJ and save to disk
     save_fetch_status({"running": True, "count": 0, "error": None})
     try:
         if not ej_login():
-            save_fetch_status({"running": False, "count": 0, "error": "EasyJob not configured — check .env credentials"})
+            save_fetch_status({"running": False, "count": 0, "error": "EasyJob not configured - check .env credentials"})
             return
         items = ej.get_all_items_full()
         if not isinstance(items, list):
@@ -1305,7 +1302,7 @@ def _run_fetch():
 
 
 @app.route("/import/fetch_from_ej", methods=["POST"])
-def import_fetch_from_ej():
+def import_fetch_from_ej(): # Endpoint to trigger fetching items from EJ
     status = load_fetch_status()
     if status.get("running"):
         return jsonify({"already_running": True})
@@ -1314,35 +1311,35 @@ def import_fetch_from_ej():
 
 
 @app.route("/import/fetch_status", methods=["GET"])
-def import_fetch_status():
+def import_fetch_status(): # Endpoint to get current fetch status
     return jsonify(load_fetch_status())
 
 
 @app.route("/import/start", methods=["POST"])
-def import_start():
+def import_start(): # Endpoint to start the import process after fetching items from EJ
     if load_import_status() and load_import_status().get("running"):
         return jsonify({"error": "Import already running"}), 409
 
-    # Read items from ej_export.json on disk — no POST body needed
+    # Read items from ej_export.json on disk - no POST body needed
     fetch = load_fetch_status()
     if fetch.get("error"):
         return jsonify({"error": f"Fetch error: {fetch['error']}"}), 400
     if fetch.get("running"):
-        return jsonify({"error": "Fetch still in progress — wait for it to finish"}), 409
+        return jsonify({"error": "Fetch still in progress - wait for it to finish"}), 409
 
     items = load_ej_export()
     if not items:
-        return jsonify({"error": "No items found — run Fetch from EasyJob first"}), 400
+        return jsonify({"error": "No items found - run Fetch from EasyJob first"}), 400
 
     if not ej_login():
-        return jsonify({"error": "EasyJob not configured — check .env credentials"}), 500
+        return jsonify({"error": "EasyJob not configured - check .env credentials"}), 500
 
     threading.Thread(target=run_import, args=(items,), daemon=True).start()
     return jsonify({"started": True, "total": len(items)})
 
 
 @app.route("/import/status", methods=["GET"])
-def import_status():
+def import_status(): # Endpoint to get current import status
     status = load_import_status()
     if not status:
         return jsonify({"running": False, "never_run": True})
@@ -1351,9 +1348,9 @@ def import_status():
 
 # -- Barcode Scanner --
 
-@app.route("/barcode_scan")
-def barcode_scan():
-    return render_template("barcode_scan.html", page="barcode_scan")
+@app.route("/barcode_finder")
+def barcode_finder(): # Endpoint to display the barcode finder page
+    return render_template("barcode_finder.html", page="barcode_finder")
 
 
 # -- Run --

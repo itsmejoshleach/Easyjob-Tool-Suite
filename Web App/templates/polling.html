@@ -68,7 +68,7 @@
     {% if not ej_ok %}
     <div class="alert alert-warning">
         <i class="fa-solid fa-triangle-exclamation me-2"></i>
-        EasyJob not connected — check your <code>.env</code> credentials.
+        EasyJob not connected - check your <code>.env</code> credentials.
     </div>
     {% endif %}
 
@@ -214,7 +214,7 @@ function refreshCalendar() {
     fetch('/calendar_watch/refresh', { method: 'POST' })
         .then(r => r.json())
         .then(() => {
-            // Poll until done (refresh is instant since it's background — just re-fetch status)
+            // Poll until done (refresh is instant since it's background - just re-fetch status)
             setTimeout(() => {
                 loadCalendarStatus();
                 btn.disabled  = false;
@@ -280,7 +280,7 @@ function renderCalendar(d) {
 
     totalLabel.textContent = entries.length
         ? entries.length + ' entries tracked in the next 35 days'
-        : 'No entries tracked yet — click Check Now to fetch.';
+        : 'No entries tracked yet - click Check Now to fetch.';
 
     // Sort by raw start date
     entries.sort((a, b) => (a.start_raw || '').localeCompare(b.start_raw || ''));

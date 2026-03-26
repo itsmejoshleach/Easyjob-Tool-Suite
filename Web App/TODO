@@ -7,8 +7,8 @@
   ✔ Create job watcher JSON storage @done(26-03-10 21:48)
   ✔ Poll EasyJob API every 30 minutes @done(26-03-10 21:48)
   ✔ Detect job status changes @done(26-03-10 21:48)
-  ☐ Send notifications on changes
-  ☐ Display changes in web UI
+  ☐ Send browser notifications on changes
+  ✔ Display changes in web UI @done(26-03-26 14:40)
     Job Watch:
   ✔ Add job confirmation/unlock notifications @done(26-03-26 09:43)
   ✔ Add ability to "Mark changes as Read" @done(26-03-26 09:43)
@@ -53,19 +53,19 @@
   ☐ Allow quick editing
 
 ### Item Management
-☐ Add bulk CSV import
+✔ Add bulk CSV import @done(26-03-26 14:41)
 ☐ Add bulk CSV export
 ☐ Implement item categories/tags
 ✘ Add item image upload @cancelled(26-03-10 23:40)
-☐ Support multiple barcode formats
-☐ Add item duplication feature
+✘ Support multiple barcode formats @cancelled(26-03-26 14:41)
+✘ Add item duplication feature @cancelled(26-03-26 14:41)
 
 ### Label Features
 ☐ Create multiple label templates
 ☐ Add QR code support
 ☐ Support custom label sizes
 ☐ Batch label printing
-☐ Export labels to PDF
+☐ Export batch labels to PDF
 
 ## Low Priority Features
 
@@ -73,10 +73,11 @@
 ☐ Add user authentication/login
 ☐ Add dark/light theme toggle (currently dark only)
 ☐ Improve mobile responsiveness
+☐ Add option to use webcam / phone camera for barcode scanning - All pages
 ☐ Add keyboard shortcuts
 
 ### Performance & Quality
-☐ Replace CSV with SQLite/PostgreSQL
+☐ Replace CSV with SQLite/PostgreSQL for better performance
 ✔ Add pagination for large item lists @done(26-03-10 23:40)
 ☐ Implement search result caching
 ✔ Add loading indicators @done(26-03-10 23:40)
@@ -88,8 +89,8 @@
 
 ### Advanced Features
 ☐ Item history/audit log
-☐ Advanced search filters (regex)
-☐ Saved searches
+☐ Advanced search filters (regex expansion)
+☐ Saved searches / recent searches
 ☐ Export reports
 ☐ Item usage statistics
 ☐ Low stock alerts
@@ -120,4 +121,8 @@
 - All static files in `/static/` directory
 
 
-✔ Custom Search function - put in barcode and beep when found. @done(26-03-26 09:42)
+✔ Custom Search function - put in barcode and highlight when found. @done(26-03-26 09:42)
+☐ Make loud audible beep when a barcode is found
+☐ Move item search away from index, give seperate page.
+☐ Make guide of how to use site page
+☐ Make home page - link to guide page, quick access to things & add recent lookups

@@ -14,7 +14,7 @@
         </div>
     </div>
 
-    <!-- PASTE AREA — hidden once running -->
+    <!-- PASTE AREA - hidden once running -->
     <div id="inputSection">
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -38,7 +38,7 @@
         </div>
     </div>
 
-    <!-- PROGRESS — shown once running -->
+    <!-- PROGRESS - shown once running -->
     <div id="progressSection" style="display:none;">
 
         <div class="d-flex justify-content-between mb-1">
@@ -150,7 +150,7 @@ function pollFetchStatus() {
                 }
 
                 if (!d.items || d.items.length === 0) {
-                    fetchError('No items returned — check EasyJob connection and search term.');
+                    fetchError('No items returned - check EasyJob connection and search term.');
                     return;
                 }
 
@@ -235,7 +235,7 @@ function applyStatus(d) {
     document.getElementById('progressLabel').textContent =
         d.running
             ? processed + ' / ' + total + ' checked\u2026'
-            : 'Complete — ' + processed + ' / ' + total + ' processed';
+            : 'Complete - ' + processed + ' / ' + total + ' processed';
 
     document.getElementById('cntAdded').textContent     = d.added      || 0;
     document.getElementById('cntBarcoded').textContent  = d.barcoded   || 0;

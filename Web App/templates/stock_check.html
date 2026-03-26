@@ -100,7 +100,7 @@
 <div class="glass-card p-4 text-white">
 
     <h2 class="mb-1"><i class="fa-solid fa-warehouse me-2"></i>Stock Check</h2>
-    <p class="text-secondary small mb-4">Search by item name, RP barcode, EJ number, or item ID — all resolve to stock-type level.</p>
+    <p class="text-secondary small mb-4">Search by item name, RP barcode, EJ number, or item ID - all resolve to stock-type level.</p>
 
     <!-- Search form -->
     <form method="POST" id="stockForm" onsubmit="showLoading()">
@@ -126,18 +126,18 @@
         <!-- Hint chips -->
         <div class="hint-chips">
             <span class="text-secondary" style="font-size:0.72rem; line-height:2;">Try:</span>
-            <span class="hint-chip" onclick="setQuery('BP2/205')">BP2/205 <span style="opacity:0.45;">— specific device</span></span>
-            <span class="hint-chip" onclick="setQuery('@si94884')">@si94884 <span style="opacity:0.45;">— @si barcode</span></span>
-            <span class="hint-chip" onclick="setQuery('94884')">94884 <span style="opacity:0.45;">— bare @si number</span></span>
-            <span class="hint-chip" onclick="setQuery('10934')">10934 <span style="opacity:0.45;">— EJ item ID</span></span>
-            <span class="hint-chip" onclick="setQuery('1007969.00')">1007969.00 <span style="opacity:0.45;">— EJ item number</span></span>
-            <span class="hint-chip" onclick="setQuery('BP2')">BP2 <span style="opacity:0.45;">— base barcode</span></span>
-            <span class="hint-chip" onclick="setQuery('ROE BP2')">ROE BP2 <span style="opacity:0.45;">— name search</span></span>
+            <span class="hint-chip" onclick="setQuery('BP2/205')">BP2/205 <span style="opacity:0.45;">- specific device</span></span>
+            <span class="hint-chip" onclick="setQuery('@si94884')">@si94884 <span style="opacity:0.45;">- @si barcode</span></span>
+            <span class="hint-chip" onclick="setQuery('94884')">94884 <span style="opacity:0.45;">- bare @si number</span></span>
+            <span class="hint-chip" onclick="setQuery('10934')">10934 <span style="opacity:0.45;">- EJ item ID</span></span>
+            <span class="hint-chip" onclick="setQuery('1007969.00')">1007969.00 <span style="opacity:0.45;">- EJ item number</span></span>
+            <span class="hint-chip" onclick="setQuery('BP2')">BP2 <span style="opacity:0.45;">- base barcode</span></span>
+            <span class="hint-chip" onclick="setQuery('ROE BP2')">ROE BP2 <span style="opacity:0.45;">- name search</span></span>
         </div>
 
         <p class="text-secondary mt-3 mb-0" style="font-size:0.75rem;">
             <i class="fa-solid fa-circle-info me-1"></i>
-            Name and base barcode searches query all matching items — may take a few seconds.
+            Name and base barcode searches query all matching items - may take a few seconds.
         </p>
     </form>
 
@@ -179,12 +179,12 @@
     <div class="text-secondary" style="line-height:2; font-size:0.85rem;">
         <p class="mb-2">Accepts any of the following:</p>
         <div class="d-flex flex-column gap-1">
-            <span><code>BP2/205</code> — specific RP device barcode → resolves to stock type</span>
-            <span><code>@si94884</code> or <code>94884</code> — EJ @si barcode or bare number</span>
-            <span><code>10934</code> — EJ internal item ID → direct lookup</span>
-            <span><code>1007969.00</code> — EJ item number → name search match</span>
-            <span><code>BP2</code> or <code>BP2/</code> — base barcode prefix → all matching stock types</span>
-            <span><code>ROE BP2</code> — partial name → wildcard search across all items</span>
+            <span><code>BP2/205</code> - specific RP device barcode → resolves to stock type</span>
+            <span><code>@si94884</code> or <code>94884</code> - EJ @si barcode or bare number</span>
+            <span><code>10934</code> - EJ internal item ID → direct lookup</span>
+            <span><code>1007969.00</code> - EJ item number → name search match</span>
+            <span><code>BP2</code> or <code>BP2/</code> - base barcode prefix → all matching stock types</span>
+            <span><code>ROE BP2</code> - partial name → wildcard search across all items</span>
         </div>
     </div>
     {% endif %}

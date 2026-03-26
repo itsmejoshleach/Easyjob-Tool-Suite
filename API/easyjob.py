@@ -1,11 +1,11 @@
 # EasyJob API Helper
 
 # Definitions:
-# Barcode    - Rental-Point style barcode (device-specific), e.g. BP2/205
-# Device_Id  - EJ device-specific number (individually barcoded items)
-# Item_Id    - EJ generic item number (non-barcoded / generic items)
+# Barcode    - Rental-Point style barcode (individual device specific tag - Whats on the barcode sticker), e.g. BP2/205
+# Device_Id  - EJ device-specific number (individually barcoded items) e.g.94884 or @si94884
+# Item_Id    - EJ generic item number (non-barcoded / generic items) e.g. 10934
 # Job_Id     - Internal EJ job ID
-# Job_No     - CT job ID
+# Job_No     - CT job ID e.g. 3138.01
 
 import requests
 import os
@@ -15,10 +15,11 @@ from urllib.parse import quote
 import urllib3
 from dotenv import load_dotenv, set_key, find_dotenv
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # Disable warnings about unverified SSL certificates (if VERIFY_CERT=False)
 
 # -- Config --
 
+# Load config from .env file in the same directory as this script
 dotenv_path = find_dotenv()
 load_dotenv(dotenv_path)
 
@@ -45,18 +46,18 @@ def _error(message):
 
 # -- Internal Helpers --
 
-def _save_token(token: str):
+def _save_token(token: str): # takes global variable and saves to .env
     global TOKEN
     TOKEN = token
     if dotenv_path:
         set_key(dotenv_path, "EJ_Access_Token", token)
 
-def _headers() -> Dict[str, str]:
+def _headers() -> Dict[str, str]: # Sets Auth headers for api requests
     if not TOKEN:
         _error("No token loaded. Call authenticate() first.")
     return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
-def _request(method: str, path: str, **kwargs):
+def _request(method: str, path: str, **kwargs): # Makes generic request, with headers, returns JSON response
     # Makes a request, auto-reauthenticates on 401
     url = f"{BASE_URL}{path}"
     _log(f"-> {method} {url}")
@@ -70,13 +71,16 @@ def _request(method: str, path: str, **kwargs):
     except requests.exceptions.RequestException as e:
         _error(f"EasyJob request failed: {e}")
 
-def _get(path: str, params=None):
+def _get(path: str, params=None): # Do GET request
     return _request("GET", path, params=params)
 
-def _post(path: str, payload=None):
+def _post(path: str, payload=None): # Do POST request
     return _request("POST", path, json=payload)
 
-def _convert_barcode_to_device_id(barcode: str) -> int:
+
+# -- Convertors --
+
+def _convert_barcode_to_device_id(barcode: str) -> int: # Convert Rental point barcode to EJ device ID
     devices = get_device_info(barcode)
     if not devices:
         _error(f"No device found for barcode {barcode}")
@@ -85,7 +89,7 @@ def _convert_barcode_to_device_id(barcode: str) -> int:
         _error("Device Id missing in response")
     return int(device_id)
 
-def _convert_jobno_to_jobid(search_term: str) -> int:
+def _convert_jobno_to_jobid(search_term: str) -> int: # Convert Ct job Number to EJ Job ID
     jobs = get_job_info(search_term)
     if not jobs:
         _error(f"No job found matching '{search_term}'")
@@ -97,7 +101,7 @@ def _convert_jobno_to_jobid(search_term: str) -> int:
 
 # -- Authentication --
 
-def authenticate() -> str:
+def authenticate() -> str: # Do Auth request, and save token
     global TOKEN
     if not USERNAME or not PASSWORD:
         _error("Username and password required for authentication")
@@ -109,7 +113,7 @@ def authenticate() -> str:
     _save_token(token)
     return token
 
-def quick_login(base_url: str = None, username: str = None, password: str = None, verify_cert: bool = False):
+def quick_login(base_url: str = None, username: str = None, password: str = None, verify_cert: bool = False): # EJ "Quick Login" Function
     # Load config overrides, use existing token if available
     global BASE_URL, USERNAME, PASSWORD, VERIFY_CERT
     if base_url:
@@ -125,11 +129,11 @@ def quick_login(base_url: str = None, username: str = None, password: str = None
 
 # -- Item Functions --
 
-def get_items_in_job(job_id: str):
+def get_items_in_job(job_id: str): # List items in job - it does exactly what you think it does
     # Returns list of items on a job
     return _get(f"/api.json/Items/BillOfItems/?id={job_id}")
 
-def get_all_items(searchtext: str = ""):
+def get_all_items(searchtext: str = ""): # Lists all items matching criteria (Search text)
     # Returns full item list, optionally filtered by search text.
     # Uses inline URL to avoid requests double-encoding the * wildcard.
     if searchtext:
@@ -137,7 +141,7 @@ def get_all_items(searchtext: str = ""):
         return _get(f"/api.json/Items/List/?searchtext={encoded}")
     return _get("/api.json/Items/List/")
 
-def get_all_items_full():
+def get_all_items_full(): # Sweep through alphanumeric chars getting all items, then colalte into one response
     # EJ caps results per request, so sweep A-Z + 0-9 to paginate the full catalogue.
     # Tries "*<UK> X*" first (CT naming convention); falls back to plain "*X*" if that returns nothing.
     import string
@@ -167,22 +171,19 @@ def get_all_items_full():
 
     # Fall back to plain sweep if nothing came back
     if not all_items:
-        _log("UK-tagged sweep returned nothing — falling back to plain *X* sweep")
+        _log("UK-tagged sweep returned nothing - falling back to plain *X* sweep")
         all_items = _sweep("*{}*")
 
     return all_items
 
-def get_item_details(item_id: int):
-    # Returns detailed info for a single item, including RentalInventory (total active owned count)
+def get_item_details(item_id: int): # Returns detailed info for a single item, including RentalInventory (total active owned count)
     return _get(f"/api.json/Items/Details/?id={item_id}")
 
-def get_item_accessories(item_id: int):
-    # Returns linked/accessory items for a given stock type
+def get_item_accessories(item_id: int): # Returns linked/accessory items for a given stock type
     return _get(f"/api.json/Items/AccessoryItems/?id={item_id}")
 
-def get_item_availability(item_id: int, start_date: str = None, end_date: str = None, stock_id: int = None):
-    # Returns availability data for an item.
-    # EJ requires startdate + enddate — defaults to now if not provided.
+def get_item_availability(item_id: int, start_date: str = None, end_date: str = None, stock_id: int = None): # Returns availability data for an item.
+    # EJ requires startdate + enddate - defaults to now if not provided.
     # Dates must be ISO format: 2025-01-01T00:00:00.000Z
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     params = {
@@ -196,8 +197,7 @@ def get_item_availability(item_id: int, start_date: str = None, end_date: str = 
 
 # -- Info Functions --
 
-def get_device_info(device_barcode: str, debug: bool = False):
-    # Returns device info for a barcoded item (RP barcode e.g. BP2/205)
+def get_device_info(device_barcode: str, debug: bool = False): # Returns device info for a barcoded item (RP barcode e.g. BP2/205)
     # URL-encodes the barcode to handle special characters like /
     encoded = quote(device_barcode, safe="")
     endpoint = f"/api.json/Common/BarcodeSearch?id={encoded}"
@@ -209,34 +209,29 @@ def get_device_info(device_barcode: str, debug: bool = False):
         _log(f"Response: {result}")
     return result
 
-def get_calendar(start_date: str, days: int = 14):
-    # Fetch calendar entries from EJ dashboard.
+def get_calendar(start_date: str, days: int = 14): # Fetch calendar entries from EJ dashboard.
     # start_date: "YYYY-MM-DD", days: how many days ahead to fetch.
     return _get(f"/api.json/dashboard/calendar/?days={days}&startdate={start_date}")
 
-def get_device_list(item_id, search_text: str = ""):
-    # Returns all individual devices for a given item type (used to check if individually barcoded)
+def get_device_list(item_id, search_text: str = ""): # Returns all individual devices for a given item type (used to check if individually barcoded)
     return _get(f"/api.json/Items/DeviceList/?id={item_id}&searchtext={search_text}")
 
-def get_job_info(search_name: str):
-    # Returns job info matching a search term / job number
+def get_job_info(search_name: str): # Returns job info matching a search term / job number
     # URL-encodes the search term to handle special characters
     encoded = quote(f"*{search_name}", safe="*")
     return _get(f"/api.json/Jobs/List/?style=List&searchtext={encoded}")
 
-def get_job_details(job_id: int):
-    # Returns full job details including DayTimeOut, DayTimeIn, JobState, etc.
+def get_job_details(job_id: int): # Returns full job details including DayTimeOut, DayTimeIn, JobState, etc.
     return _get(f"/api.json/Jobs/Details/?id={job_id}")
 
-def test_connection():
-    # Quick check - returns server info if token is valid
+def test_connection(): # Quick check - returns server info if token is valid
     return _get("/api.json/Common/GetGlobalWebSettings")
 
 
 # -- Stock Check --
 
-def get_stock_summary(item_id: int, start_date: str = None, end_date: str = None):
-    # Returns a dict showing how many of an item are:
+def get_stock_summary(item_id: int, start_date: str = None, end_date: str = None): # Returns a dict showing how many of an item are where
+    # Options:
     #   - In warehouse (available)
     #   - Out on jobs (booked)
     #   - In workshop / service (if tracked as a separate stock location)
@@ -262,7 +257,7 @@ def get_stock_summary(item_id: int, start_date: str = None, end_date: str = None
     # Service     - quantity in workshop/service (if WMS module active)
     total   = avail.get("Total", 0)
     booked  = avail.get("Booked", 0)
-    service = avail.get("Service", 0)    # workshop / QA / repair — requires WMS module
+    service = avail.get("Service", 0)    # workshop / QA / repair - requires WMS module
     avail_qty = avail.get("Avail", total - booked - service)
 
     return {
@@ -274,8 +269,7 @@ def get_stock_summary(item_id: int, start_date: str = None, end_date: str = None
         "raw":        avail     # full response for debugging
     }
 
-def get_stock_summary_by_name(search_name: str, start_date: str = None, end_date: str = None):
-    # Convenience wrapper - looks up item by name then returns stock summary
+def get_stock_summary_by_name(search_name: str, start_date: str = None, end_date: str = None): # Convenience wrapper - looks up item by name then returns stock summary
     items = get_all_items(searchtext=search_name)
     if not items:
         _error(f"No items found matching '{search_name}'")
@@ -291,8 +285,7 @@ def get_stock_summary_by_name(search_name: str, start_date: str = None, end_date
         results.append(summary)
     return results
 
-def print_stock_summary(search_name: str):
-    # Prints a readable stock report for an item
+def print_stock_summary(search_name: str): # Prints a readable stock report for an item
     results = get_stock_summary_by_name(search_name)
     for r in results:
         print(f"\n  {r['name']} (ID: {r['item_id']})")
@@ -304,8 +297,7 @@ def print_stock_summary(search_name: str):
 
 # -- Job Item Helpers --
 
-def print_items_in_job(search_term: str):
-    # Prints a dict of all items on a job
+def print_items_in_job(search_term: str): # Prints a dict of all items on a job
     job = get_job_info(search_term)
     job_id = int(job[0]["Id"])
     job_items = get_items_in_job(job_id)

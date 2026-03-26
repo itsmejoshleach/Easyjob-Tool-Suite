@@ -315,7 +315,7 @@
 
             </div>
 
-            <!-- Inline edit panel — hidden until Edit clicked -->
+            <!-- Inline edit panel - hidden until Edit clicked -->
             <div id="profileEditPanel" style="display:none; padding: 0 24px 24px;">
                 <hr class="border-secondary">
                 <div class="profile-section-title mb-3"><i class="fa-solid fa-pencil me-1"></i>Edit Profile</div>
@@ -466,7 +466,7 @@ function renderProfile(data) {
         return;
     }
 
-    // Declare ai early — everything below depends on it
+    // Declare ai early - everything below depends on it
     const ai    = data.ai_content || {};
     const modal = document.getElementById('profileModal');
 
@@ -504,7 +504,7 @@ function renderProfile(data) {
         labelEl.style.display    = 'block';
     }
 
-    // Description — show placeholder in UI but don't store it
+    // Description - show placeholder in UI but don't store it
     document.getElementById('profileDescription').textContent =
         ai.description || 'No description yet. Click Edit to add one.';
 
@@ -546,7 +546,7 @@ function renderProfile(data) {
     const ejSec = document.getElementById('profileEjSection');
     if (ej.Number || ej.ID) {
         document.getElementById('profileEjDetails').textContent =
-            `EJ Number: ${ej.Number || '—'}  ·  ID: ${ej.ID || '—'}  ·  Owned: ${ej.RentalInventory ?? '—'}`;
+            `EJ Number: ${ej.Number || '-'}  ·  ID: ${ej.ID || '-'}  ·  Owned: ${ej.RentalInventory ?? '-'}`;
         ejSec.style.display = 'block';
     } else {
         ejSec.style.display = 'none';
@@ -561,7 +561,7 @@ function toggleProfileEdit() {
     const open  = edit.style.display === 'none';
 
     if (open) {
-        // Populate from stored dataset values — never from visible text (avoids placeholder bleed-through)
+        // Populate from stored dataset values - never from visible text (avoids placeholder bleed-through)
         document.getElementById('pePhotoUrl').value    = modal.dataset.photoUrl    || '';
         document.getElementById('peDescription').value = modal.dataset.description || '';
         const steps = JSON.parse(modal.dataset.howTo || '[]');

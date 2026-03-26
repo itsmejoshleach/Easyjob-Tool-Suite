@@ -98,7 +98,7 @@
 
 <div class="glass-card p-4 text-white">
     <h2 class="mb-1">Barcode Finder</h2>
-    <p class="text-secondary mb-4">Enter a list of barcodes to find, then scan away — it beeps when matched.</p>
+    <p class="text-secondary mb-4">Enter a list of barcodes to find, then scan away - it beeps when matched.</p>
 
     <div class="row g-4">
 
@@ -143,7 +143,7 @@
             <!-- Last scanned -->
             <div class="mb-3 p-2 rounded" style="background:rgba(255,255,255,0.04)">
                 <div class="text-secondary small mb-1">Last scan:</div>
-                <div id="last-scan-display">—</div>
+                <div id="last-scan-display">-</div>
             </div>
 
             <!-- Barcode list -->
@@ -314,7 +314,7 @@ document.getElementById("btn-reset").addEventListener("click", () => {
     document.getElementById("btn-reset").style.display   = "none";
     document.getElementById("barcode-input").disabled    = false;
     document.getElementById("barcode-input").value       = "";
-    document.getElementById("last-scan-display").textContent = "—";
+    document.getElementById("last-scan-display").textContent = "-";
     document.getElementById("scan-status-text").textContent  = "Listening for scans...";
     document.getElementById("scan-indicator").classList.add("listening");
 });

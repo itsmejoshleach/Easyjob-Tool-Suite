@@ -1,3 +1,4 @@
+# Python module requirements for app.py
 requests
 python-dotenv
 python-barcode

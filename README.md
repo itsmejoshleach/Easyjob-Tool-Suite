@@ -1,131 +1,217 @@
-# Inventory & Custom Barcode Management App
+# Inventory Management & EasyJob Integration
 
-A web-based internal inventory management system built with **Flask**, **Python**, and **Bootstrap**, designed for **Creative Technology Group (CT) Intranet use**.  
-It allows you to manage items, generate barcodes, create printable labels, and handle custom barcodes, with support for wildcard search.
-
----
-
-## Features
-
-- **Item Search**
-  - Search inventory by name, description, or barcode
-  - Supports wildcard searches (e.g., `ABC*` or `*123`)
-  - View barcode labels directly in the browser
-  - Print barcode labels with a single click
-
-- **Custom Barcodes**
-  - Add custom barcodes not tied to standard items
-  - Generate and print custom labels
-  - Delete individual labels or clear all custom barcodes
-  - Supports wildcard search
-
-- **Barcode & Label Generation**
-  - Generates **Code128 barcodes** via [barcodeapi.org](https://barcodeapi.org/)
-  - Creates **50mm × 25mm printable labels** with item name and barcode
-  - Handles both standard items and custom barcodes
-
-- **Job Watching**
-  - Placeholder page for job polling and notifications
-
-- **CSV-Based Storage**
-  - Items and custom barcodes are stored in `items.csv` and `custom_barcodes.csv`
-  - Automatically creates CSV files if missing
-  - All barcode images and labels stored in `static/` directories
+A Flask-based internal inventory system designed for Creative Technology Group workflows.  
+This app integrates with the EasyJob API to provide item search, stock visibility, job tracking, and barcode utilities.
 
 ---
 
-## Directory Structure
+## 🚀 Features
 
-BarcodeManager/
-│
-├─ app.py # Main Flask application
-├─ items.csv # Standard inventory CSV
-├─ custom_barcodes.csv # Custom barcode CSV
-├─ monofonto rg.otf # Font used for labels
-├─ templates/
-│ ├─ base_layout.html
-│ ├─ index.html
-│ ├─ custom_barcodes.html
-│ └─ polling.html
-├─ static/
-│ ├─ barcode_images/ # Generated barcode images
-│ ├─ labels/ # Standard labels
-│ ├─ custom_barcodes/ # Custom barcode images
-│ ├─ custom_labels/ # Custom labels
-│ └─ icon.png
-└─ README.md
+- 🔍 **Item Search**
+  - Search EasyJob inventory
+  - View item details and metadata
 
+- 📦 **Stock Check**
+  - Real-time stock levels (warehouse, on jobs, workshop)
+  - Availability calculations via EasyJob API
+
+- 👀 **Job Watching**
+  - Monitor job changes (polling system)
+  - Track item allocations dynamically
+
+- 🏷️ **Barcode Tools**
+  - Barcode lookup (RentalPoint → EasyJob device)
+  - Custom barcode generation & management
+
+- 📥 **Import System**
+  - Bulk import items into local system
+  - Sync from EasyJob with progress tracking
+
+- 🔄 **EasyJob Sync**
+  - Background sync with progress polling
+  - Duplicate-safe item ingestion
+  - Error tracking and reporting
 
 ---
 
-## Installation
+## 🧱 Project Structure
 
-1. Clone the repository
 ```
-git clone https://github.com/itsmejoshleach/BarcodeManager.git
-cd BarcodeManager
+.
+├── app.py                  # Main Flask app
+├── easyjob.py             # EasyJob API helper module
+├── templates/
+│   ├── base_layout.html   # Main UI layout (Bootstrap-based)
+│   └── *.html             # Page templates
+├── static/
+│   ├── barcode_images/    # Generated barcodes
+│   ├── background.jpg
+│   └── icon.png
+├── items.csv              # Local item cache
+├── custom_barcodes.csv    # Custom barcode mappings
+├── requirements.txt
+└── .env                   # Environment config (not committed)
 ```
-2. Create a virtual environment
+
+---
+
+## ⚙️ Setup
+
+### 1. Clone the repo
+
+```bash
+git clone <repo-url>
+cd inventory-app
 ```
+
+---
+
+### 2. Create virtual environment
+
+```bash
 python -m venv venv
-source venv/bin/activate   # Linux / macOS
-venv\Scripts\activate      # Windows
+source venv/bin/activate     # Linux / Mac
+venv\Scripts\activate        # Windows
 ```
 
-3. Install dependencies
-```
+---
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-requirements.txt should include:
+---
+
+### 4. Configure environment
+
+Create a `.env` file:
+
+```env
+EJ_BASE_URL=https://your-easyjob-instance
+EJ_USERNAME=your_username
+EJ_PASSWORD=your_password
+EJ_Access_Token=
+```
+
+> Token is automatically populated after first authentication.
+
+---
+
+### 5. Run the app
+
+```bash
+python app.py
+```
+
+App will be available at:
 
 ```
-Flask
-pandas
-requests
-Pillow
+http://127.0.0.1:5000
 ```
 
-4. Ensure directories exist
-The app will automatically create necessary directories in static/ on first run.
+---
 
-## Usage:
-### Run the app
-`python app.py`
+## 🔐 Authentication Flow
 
-### Access in browser
-`http://127.0.0.1:5000/`
+- Uses EasyJob OAuth token (`/token`)
+- Token is:
+  - Cached in memory
+  - Persisted to `.env`
+- Automatically refreshes on `401 Unauthorized`
 
-## Features
+---
 
-- Add Item: Click the + Add Item button in Item Search.
+## 🔌 EasyJob API Helper (`easyjob.py`)
 
-- Search Items: Use the search bar with wildcards (*) to filter items.
+### Key Capabilities
 
-- Print Labels: Click Print Label to open a printable view.
+- Authentication + token persistence
+- Generic request wrapper with retry
+- Item + stock endpoints
+- Device & barcode resolution
+- Job lookup & details
+- Availability + stock summaries
 
-- Custom Barcodes: Go to the Custom Barcodes tab to add or manage custom barcodes.
+### Example Usage
 
-- Delete Labels: Delete individual labels or clear all custom barcodes from CSV and disk.
+```python
+from easyjob import quick_login, get_stock_summary_by_name
 
-## Notes
-- Labels are generated at 300 DPI, 50mm × 25mm size.
+quick_login()
+results = get_stock_summary_by_name("LED Panel")
 
-- Barcodes are retrieved from barcodeapi.org as PNGs.
+for item in results:
+    print(item["name"], item["warehouse"])
+```
 
-- Font for labels is monofonto rg.otf; adjust FONT_PATH in app.py if needed.
+---
 
-- Wildcard searches use * to match any characters.
+## 🔄 Sync System
 
-## License
-- This project is for internal company/intranet use only.
-© 2025-2026 Josh Leach
+- Triggered from UI ("Sync from EasyJob")
+- Runs in background
+- Progress tracked via:
 
-## Future Improvements
-- Implement polling page with live job notifications.
+```
+/sync_status
+```
 
-- Add bulk CSV import/export.
+### Status includes:
 
-- Add user authentication for access control.
+- Processed / total items
+- Items added
+- Items skipped
+- Errors (if any)
+- Last sync timestamp
 
-- Improve label styling with additional templates or QR codes.
+---
+
+## 📡 API Endpoints (Internal)
+
+| Endpoint         | Method | Description                  |
+|----------------|--------|------------------------------|
+| `/sync_items`   | POST   | Start EasyJob sync           |
+| `/sync_status`  | GET    | Get sync progress            |
+| `/`             | GET    | Item search page             |
+| `/stock`        | GET    | Stock checker                |
+| `/polling`      | GET    | Job watching UI              |
+
+---
+
+## 🧠 Design Notes
+
+- **Token handling** is automatic and resilient
+- **Search pagination workaround** implemented via A-Z sweep
+- **UI** uses Bootstrap 5 + glassmorphism styling
+- Built for **internal intranet deployment**
+
+---
+
+## ⚠️ Known Limitations
+
+- EasyJob API result limits require multi-query sweeping
+- SSL verification disabled by default (`VERIFY_CERT = False`)
+- No authentication layer on Flask app (intended for internal network)
+
+---
+
+## 🛠️ Future Improvements
+
+- See TODO File
+
+---
+
+## 👨‍💻 Author
+
+**Josh Leach**  
+Creative Technology Group UK
+
+📧 jleach@ctlondon.com  
+
+---
+
+## 📄 License
+
+GNU GENERAL PUBLIC LICENSE

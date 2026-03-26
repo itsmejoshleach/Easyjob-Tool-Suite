@@ -13,13 +13,13 @@
     <div class="d-flex flex-wrap gap-3 mb-3">
 
         <div class="stat-pill pill-warehouse">
-            <span class="num">{{ warehouse | int if warehouse is not none else '—' }}</span>
+            <span class="num">{{ warehouse | int if warehouse is not none else '-' }}</span>
             <span class="lbl"><i class="fa-solid fa-warehouse me-1"></i>In Warehouse</span>
         </div>
 
         {% if workshop is not none %}
         <div class="stat-pill pill-jobs">
-            <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
+            <span class="num">{{ on_jobs | int if on_jobs is not none else '-' }}</span>
             <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out on Jobs</span>
         </div>
         <div class="stat-pill pill-workshop">
@@ -28,13 +28,13 @@
         </div>
         {% else %}
         <div class="stat-pill pill-jobs">
-            <span class="num">{{ on_jobs | int if on_jobs is not none else '—' }}</span>
+            <span class="num">{{ on_jobs | int if on_jobs is not none else '-' }}</span>
             <span class="lbl"><i class="fa-solid fa-truck me-1"></i>Out / Workshop</span>
         </div>
         {% endif %}
 
         <div class="stat-pill pill-total">
-            <span class="num">{{ total | int if total is not none else '—' }}</span>
+            <span class="num">{{ total | int if total is not none else '-' }}</span>
             <span class="lbl"><i class="fa-solid fa-layer-group me-1"></i>Total Owned</span>
         </div>
 
