@@ -60,7 +60,7 @@ This app integrates with the EasyJob API to provide item search, stock visibilit
 ### 1. Clone the repo
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/itsmejoshleach/Easyjob-Tool-Suite
 cd inventory-app
 ```
 
