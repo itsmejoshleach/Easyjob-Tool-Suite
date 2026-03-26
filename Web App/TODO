@@ -1,25 +1,30 @@
-# Web App TODO - Inventory Management Interface
+# Web App TODO – Inventory Management Interface
 
-## High Priority Features
+## 🔴 High Priority Features
 
-### Polling Page
+### 📡 Polling Page (Job Watcher)
 ✔ Implement job watcher functionality @done(26-03-10 21:48)
-  ✔ Create job watcher JSON storage @done(26-03-10 21:48)
-  ✔ Poll EasyJob API every 30 minutes @done(26-03-10 21:48)
-  ✔ Detect job status changes @done(26-03-10 21:48)
-  ☐ Send browser notifications on changes
-  ✔ Display changes in web UI @done(26-03-26 14:40)
-    Job Watch:
-  ✔ Add job confirmation/unlock notifications @done(26-03-26 09:43)
-  ✔ Add ability to "Mark changes as Read" @done(26-03-26 09:43)
-    item availability watcher:
-  ☐ Track when items return from jobs
-  ☐ Show next available date
-    Calendar Watch:
-  ✔ Change time & Date to a readable format @done(26-03-11 09:10)
-  ✔ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title. Otherwise use `Caption` + `PostCaption` @done(26-03-11 09:10)
+✔ Create job watcher JSON storage @done(26-03-10 21:48)
+✔ Poll EasyJob API every 30 minutes @done(26-03-10 21:48)
+✔ Detect job status changes @done(26-03-10 21:48)
+✔ Display changes in web UI @done(26-03-26 14:40)
+✔ Add job confirmation/unlock notifications @done(26-03-26 09:43)
+✔ Add ability to "Mark changes as Read" @done(26-03-26 09:43)
+☐ Send browser notifications on changes
 
-### Stock Check Page
+#### Item Availability Watcher
+☐ Track when items return from jobs
+  Show When next X amount of items are back in stock. (Look through dates until "in warehouse" number = current total + X amount of items)
+☐ Show next available date
+  Show when item back in stock (Look through dates until "in warheouse" number => 1)
+
+#### Calendar Watch
+✔ Change time & Date to a readable format @done(26-03-11 09:10)
+✔ If "Prep" in `Caption` then combine "Prep" & `PostCaption` as the title. Otherwise use `Caption` + `PostCaption` @done(26-03-11 09:10)
+
+---
+
+### 📦 Stock Check Page
 ✔ Create new stock check page/tab @done(26-03-10 21:48)
 ✔ Add barcode scanner input field @done(26-03-10 21:48)
 ✔ Display item information on scan @done(26-03-10 21:48)
@@ -28,20 +33,26 @@
   ✔ Show availability status @done(26-03-10 21:48)
 ✔ Support both Device ID and Item ID lookup @done(26-03-10 21:48)
 
-### Item Search Enhancements
+---
+
+### 🔍 Item Search Enhancements
 ✔ Add "More Info" button to item cards @done(26-03-10 21:48)
 ✔ Create item profile modal/popup @done(26-03-10 23:39)
-  ☐ Show associated/related items
-  ✔ Display physical description @done(26-03-26 09:43)
-  ✔ Show item image/photo @done(26-03-10 23:39)
-  ✔ Add layman's terms description @done(26-03-10 23:39)
-  ✔ List common use case scenarios @done(26-03-26 09:43)
-  ☐ Show similar/alternative items
-  ✔ Include usage instructions @done(26-03-10 23:39)
+✔ Display physical description @done(26-03-26 09:43)
+✔ Show item image/photo @done(26-03-10 23:39)
+✔ Add layman's terms description @done(26-03-10 23:39)
+✔ List common use case scenarios @done(26-03-26 09:43)
+✔ Include usage instructions @done(26-03-10 23:39)
+☐ Show associated/related items
+  e.g. for Megapixel Helios 4k, Show SFPs, and Distros
+☐ Show similar/alternative items
+  e.g. For 12-port distro, show 9-port distro
 
-## Medium Priority Features
+---
 
-### Data Management
+## 🟠 Medium Priority Features
+
+### 📊 Data Management
 ☐ Download all items from EasyJob
   ☐ Implement as cron job/scheduled task
   ☐ Auto-sync on schedule
@@ -52,50 +63,81 @@
   ☐ List items needing information
   ☐ Allow quick editing
 
-### Item Management
+---
+
+### 🛠 Item Management
 ✔ Add bulk CSV import @done(26-03-26 14:41)
 ☐ Add bulk CSV export
+  ☐ Job watchers
+  ☐ Calendar watches
+  ☐ Custom barcodes
+  ☐ Item Information
+    ☐ Descriptions
+    ☐ Quick Setup steps
+    ☐ Image link
 ☐ Implement item categories/tags
+
 ✘ Add item image upload @cancelled(26-03-10 23:40)
 ✘ Support multiple barcode formats @cancelled(26-03-26 14:41)
 ✘ Add item duplication feature @cancelled(26-03-26 14:41)
 
-### Label Features
+---
+
+### 🏷 Label Features
 ☐ Create multiple label templates
+  ☐ 50x24mm (current)
+  ☐ A5
+  ☐ A4
+  ☐ Micro Barcode (Size TBD)
 ☐ Add QR code support
-☐ Support custom label sizes
-☐ Batch label printing
-☐ Export batch labels to PDF
+☐ Support custom label sizes (Add custom to template list)
+☐ Batch label printing (multiple items at once)
+☐ Export batch labels to PDF (For printing later)
 
-## Low Priority Features
+---
 
-### User Interface
-☐ Add user authentication/login
+## 🟡 Low Priority Features
+
+### 🧑‍💻 User Interface
+☐ Add local user authentication/login
+
 ☐ Add dark/light theme toggle (currently dark only)
 ☐ Improve mobile responsiveness
 ☐ Add option to use webcam / phone camera for barcode scanning - All pages
 ☐ Add keyboard shortcuts
 
-### Performance & Quality
-☐ Replace CSV with SQLite/PostgreSQL for better performance
+---
+
+### ⚙ Performance & Quality
 ✔ Add pagination for large item lists @done(26-03-10 23:40)
-☐ Implement search result caching
 ✔ Add loading indicators @done(26-03-10 23:40)
 ✔ Improve error messages @done(26-03-10 23:40)
-☐ Add input validation
-☐ Make Job watchers attached to the login
-☐ Make Calender watchers attached to the login
-☐ Make custom barcodes attached to the login
 
-### Advanced Features
+☐ Replace CSV with SQLite/PostgreSQL for better performance
+☐ Implement search result caching for speed
+☐ Add input validation
+☐ Make Job watchers attached to the login creds
+☐ Make Calendar watchers attached to the login creds
+☐ Make custom barcodes attached to the login creds
+
+---
+
+### 🚀 Advanced Features
 ☐ Item history/audit log
 ☐ Advanced search filters (regex expansion)
 ☐ Saved searches / recent searches
 ☐ Export reports
+  e.g. If want to export stock check results for all LED panels on a certina date, create a PDF report for that
 ☐ Item usage statistics
 ☐ Low stock alerts
+  look 14 days ahead and ifnd out if anything is going ot be low stock, send alert
+☐ Change browser alerts to be email notifications aswell (setup per user) - Needs email from account (internal@ct-group.com).
+  For now use InternalTools@itsmejoshleach.co.uk
+---
 
-## Completed ✓
+## ✅ Completed Features
+
+### Core System
 ✔ Item search functionality
 ✔ Wildcard search support (`*` character)
 ✔ Add new items
@@ -112,17 +154,45 @@
 ✔ Responsive layout
 ✔ CSV storage for items and custom barcodes
 
-## Notes
-- Currently using CSV files for data storage
-- Barcode API: `https://barcodeapi.org/api/code128/{barcode}`
-- Labels generated at 300 DPI
-- Font: `monofonto rg.otf`
-- Network access currently disabled
-- All static files in `/static/` directory
+---
 
+### Search & UX
+✔ Custom search function (barcode highlight on match) @done(26-03-26 09:42)
 
-✔ Custom Search function - put in barcode and highlight when found. @done(26-03-26 09:42)
 ☐ Make loud audible beep when a barcode is found
-☐ Move item search away from index, give seperate page.
+☐ Move item search away from index, give separate page
 ☐ Make guide of how to use site page
-☐ Make home page - link to guide page, quick access to things & add recent lookups
+☐ Make home page (links to guide + quick access + recent lookups)
+☐ Give job watchers the Last checked time, like calendar watchers
+
+---
+
+### Admin / Access Control
+**Admin (Full access):**
+☐ Import Items
+☐ Barcode Finder
+☐ Custom Barcodes
+☐ Job Watching
+☐ Stock Check
+☐ Item Search
+☐ Easyjob Sync
+☐ Add new items
+☐ Edit Item descriptions
+☐ Edit Item barcodes
+
+**User (View only):**
+☐ Barcode Finder
+☐ Job Watching
+☐ Custom Barcodes
+☐ Stock Check
+☐ Item Search
+
+---
+
+## 📝 Notes
+- Currently using CSV files for data storage
+- Barcode API: https://barcodeapi.org/api/code128/{barcode}
+- Labels generated at 300 DPI
+- Font: monofonto rg.otf
+- Network access currently disabled
+- All static files in /static/ directory
