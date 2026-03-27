@@ -76,6 +76,7 @@
     ☐ Quick Setup steps
     ☐ Image link
 ☐ Implement item categories/tags
+☐ Implement item stock locations
 
 ✘ Add item image upload @cancelled(26-03-10 23:40)
 ✘ Support multiple barcode formats @cancelled(26-03-26 14:41)
@@ -133,6 +134,12 @@
   look 14 days ahead and ifnd out if anything is going ot be low stock, send alert
 ☐ Change browser alerts to be email notifications aswell (setup per user) - Needs email from account (internal@ct-group.com).
   For now use InternalTools@itsmejoshleach.co.uk
+☐ Move to server, put Nginx proxy in fron of App, and add SSL cert for secure access (Let's Encrypt)
+Create more admin pages:
+  ☐ Bulk item info editing
+    ☐ Bulk add images
+    ☐ Bulk add descriptions
+  
 ---
 
 ## ✅ Completed Features
@@ -168,7 +175,7 @@
 ---
 
 ### Admin / Access Control
-**Admin (Full access):**
+Admin (Full access):
 ☐ Import Items
 ☐ Barcode Finder
 ☐ Custom Barcodes
@@ -180,7 +187,7 @@
 ☐ Edit Item descriptions
 ☐ Edit Item barcodes
 
-**User (View only):**
+User (View only):
 ☐ Barcode Finder
 ☐ Job Watching
 ☐ Custom Barcodes
