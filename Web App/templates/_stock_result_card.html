@@ -63,6 +63,8 @@
     </div>
     {% endif %}
 
+    {% if session.get('role') == 'admin' %}
     <button class="raw-toggle" onclick="toggleRaw(this)">show raw API response</button>
     <div class="raw-data">{{ item.raw | tojson(indent=2) }}</div>
+    {% endif %}
 </div>

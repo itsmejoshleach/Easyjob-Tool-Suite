@@ -1,0 +1,178 @@
+{% extends "base_layout.html" %}
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+<div class="glass-card p-4 text-white">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0"><i class="fa-solid fa-users-gear me-2"></i>User Management</h2>
+        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            <i class="fa-solid fa-plus me-1"></i> Add User
+        </button>
+    </div>
+
+    {% if message %}
+    <div class="alert alert-{{ message_type or 'success' }} py-2 small mb-3">
+        {{ message }}
+    </div>
+    {% endif %}
+
+    <table class="table table-dark table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Display Name</th>
+                <th>Role</th>
+                <th>EJ Username</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for username, u in users.items() %}
+        <tr>
+            <td class="font-monospace">{{ username }}</td>
+            <td>{{ u.display_name or '-' }}</td>
+            <td>
+                {% if u.role == 'admin' %}
+                <span class="badge bg-danger">Admin</span>
+                {% else %}
+                <span class="badge bg-secondary">User</span>
+                {% endif %}
+            </td>
+            <td class="text-secondary small font-monospace">{{ u.ej_username or '-' }}</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-secondary me-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#editUserModal"
+                        data-username="{{ username }}"
+                        data-display="{{ u.display_name or '' }}"
+                        data-role="{{ u.role }}"
+                        data-ej-username="{{ u.ej_username or '' }}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                {% if username != session.username %}
+                <form method="POST" action="{{ url_for('admin_delete_user') }}" class="d-inline"
+                      onsubmit="return confirm('Delete user {{ username }}?')">
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <button class="btn btn-sm btn-outline-danger">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('admin_add_user') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input class="form-control font-monospace" name="username" required autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Display Name</label>
+                        <input class="form-control" name="display_name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input class="form-control" type="password" name="password" required autocomplete="new-password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" name="role">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <hr class="border-secondary">
+                    <p class="text-secondary small mb-2">EasyJob Credentials</p>
+                    <div class="mb-3">
+                        <label class="form-label">EJ Username</label>
+                        <input class="form-control font-monospace" name="ej_username" autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">EJ Password</label>
+                        <input class="form-control" type="password" name="ej_password" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('admin_edit_user') }}">
+                <input type="hidden" name="username" id="edit-username">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit User: <span id="edit-username-display" class="font-monospace"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Display Name</label>
+                        <input class="form-control" name="display_name" id="edit-display-name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password <span class="text-secondary small">(leave blank to keep current)</span></label>
+                        <input class="form-control" type="password" name="password" autocomplete="new-password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" name="role" id="edit-role">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <hr class="border-secondary">
+                    <p class="text-secondary small mb-2">EasyJob Credentials</p>
+                    <div class="mb-3">
+                        <label class="form-label">EJ Username</label>
+                        <input class="form-control font-monospace" name="ej_username" id="edit-ej-username" autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">EJ Password <span class="text-secondary small">(leave blank to keep current)</span></label>
+                        <input class="form-control" type="password" name="ej_password" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("editUserModal").addEventListener("show.bs.modal", (e) => {
+    const btn = e.relatedTarget;
+    document.getElementById("edit-username").value         = btn.dataset.username;
+    document.getElementById("edit-username-display").textContent = btn.dataset.username;
+    document.getElementById("edit-display-name").value    = btn.dataset.display;
+    document.getElementById("edit-ej-username").value     = btn.dataset.ejUsername;
+    const roleSelect = document.getElementById("edit-role");
+    roleSelect.value = btn.dataset.role;
+});
+</script>
+{% endblock %}

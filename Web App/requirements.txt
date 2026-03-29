@@ -5,3 +5,4 @@ python-barcode
 pandas
 Flask
 pillow
+cryptography

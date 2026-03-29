@@ -7,7 +7,10 @@ import threading
 import requests
 import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from functools import wraps
+from cryptography.fernet import Fernet, InvalidToken
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from PIL import Image, ImageDraw, ImageFont
 
 # Add parent directory to path to import API module
@@ -16,6 +19,31 @@ from API import easyjob as ej
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB - handles large EJ item exports
+app.secret_key = os.getenv("SECRET_KEY", "change-me-in-prod")
+
+# -- Encryption --
+# EJ passwords are stored encrypted in users.json.
+# FIELD_ENCRYPT_KEY in .env must be a valid Fernet key.
+# Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+def _get_fernet() -> Fernet:
+    key = os.getenv("FIELD_ENCRYPT_KEY", "")
+    if not key:
+        raise RuntimeError("FIELD_ENCRYPT_KEY not set in .env - cannot encrypt/decrypt EJ passwords.")
+    return Fernet(key.encode())
+
+def encrypt_field(plaintext: str) -> str:
+    if not plaintext:
+        return ""
+    return _get_fernet().encrypt(plaintext.encode()).decode()
+
+def decrypt_field(ciphertext: str) -> str:
+    if not ciphertext:
+        return ""
+    try:
+        return _get_fernet().decrypt(ciphertext.encode()).decode()
+    except (InvalidToken, Exception):
+        return ""  # wrong key or corrupt - return empty rather than crash
 
 
 # -- Config --
@@ -35,6 +63,7 @@ WATCHERS_FILE = "./job_watchers.json"
 CSV_COLUMNS    = ["Item Name", "Item Description / Alternate Names", "Barcode Number", "Barcode Image URL", "Barcode Image"]
 CUSTOM_COLUMNS = ["Name", "Barcode", "Barcode Image URL", "Barcode Image"]
 PROFILES_FILE  = "./item_profiles.json"   # stores More Info content keyed by item name
+USERS_FILE     = "./users.json"
 
 # Label config
 LABEL_WIDTH_MM       = 50
@@ -65,10 +94,72 @@ def ensure_csv(path, columns): # Check if csv file exists
         with open(path, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(columns)
 
-def ej_login() -> bool: # Attempt EasyJob login, return True if successful
+# -- Auth --
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_users(users):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, indent=2)
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("username"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("username"):
+            return redirect(url_for("login"))
+        if session.get("role") != "admin":
+            return render_template("403.html", page=None), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def ej_call(fn, *args, **kwargs):
+    # Wrapper for EJ API calls that handles token expiry.
+    # On RuntimeError (which is what easyjob raises on 401 after retry),
+    # clears the cached session token and re-authenticates once.
     try:
-        if not ej.TOKEN:
-            ej.quick_login()
+        return fn(*args, **kwargs)
+    except RuntimeError as e:
+        if "401" in str(e) or "request failed" in str(e).lower():
+            session.pop("ej_token", None)
+            ej.TOKEN = None
+            if ej_login():
+                return fn(*args, **kwargs)
+        raise
+
+def ej_login() -> bool:
+    # Authenticates using the current session user's EJ credentials.
+    # Caches the token in session["ej_token"] so we only re-authenticate when needed.
+    # Never reuses another user's token - token is always tied to the session.
+    # Returns False if the session has no EJ credentials configured.
+    ej_user  = session.get("ej_username", "")
+    ej_pass  = session.get("ej_password", "")
+    if not ej_user or not ej_pass:
+        ej.TOKEN = None  # ensure no stale token from another user bleeds through
+        return False
+
+    cached_token = session.get("ej_token")
+    if cached_token:
+        # Reuse cached token - set it on the module so API calls use it
+        ej.TOKEN = cached_token
+        return True
+
+    # No cached token - authenticate and cache the result
+    try:
+        ej.quick_login(username=ej_user, password=ej_pass)
+        session["ej_token"] = ej.TOKEN  # persist in session cookie
         return True
     except Exception:
         return False
@@ -204,7 +295,8 @@ def create_label(barcode_img_path, name, custom=False): # take barcode and text 
 # -- Routes --
 
 @app.route("/", methods=["GET", "POST"])
-def index(): # Home page with item search and pagination
+@login_required
+def index():
     if request.method == "POST":
         query = request.form.get("search", "").strip()
         page  = 1
@@ -220,6 +312,7 @@ def index(): # Home page with item search and pagination
 
 
 @app.route("/item_profile", methods=["GET"])
+@login_required
 def item_profile(): # GET endpoint for fetching item profile data
     # Returns JSON profile for the More Info modal.
     # Resolves item name → EJ item ID → details + accessories, then generates
@@ -296,7 +389,8 @@ def item_profile(): # GET endpoint for fetching item profile data
 
 
 @app.route("/save_profile", methods=["POST"])
-def save_profile(): # POST endpoint for saving item profile data from More Info popup
+@login_required
+def save_profile():
     data = request.get_json()
     if not data or not data.get("name"):
         return jsonify({"error": "Missing item name"}), 400
@@ -312,7 +406,8 @@ def save_profile(): # POST endpoint for saving item profile data from More Info 
     return jsonify({"ok": True})
 
 @app.route("/add", methods=["POST"])
-def add_item(): # Add new item from form submission
+@login_required
+def add_item():
     name    = request.form.get("name", "").strip()
     desc    = request.form.get("description", "").strip()
     barcode = request.form.get("barcode", "").strip()
@@ -329,7 +424,8 @@ def add_item(): # Add new item from form submission
 # -- Custom Barcodes --
 
 @app.route("/custom_barcodes", methods=["GET", "POST"])
-def custom_barcodes(): # Page for managing custom barcodes
+@login_required
+def custom_barcodes():
     query = ""
     if request.method == "POST":
         query = request.form.get("search", "").strip()
@@ -348,7 +444,8 @@ def custom_barcodes(): # Page for managing custom barcodes
     return render_template("custom_barcodes.html", items=items, query=query, page="custom")
 
 @app.route("/add_custom_barcode", methods=["POST"])
-def add_custom_barcode(): # Add new custom barcode from form submission
+@login_required
+def add_custom_barcode():
     name    = request.form.get("name", "").strip()
     barcode = request.form.get("barcode", "").strip()
     if not name or not barcode:
@@ -364,7 +461,8 @@ def add_custom_barcode(): # Add new custom barcode from form submission
 # -- Edit Item --
 
 @app.route("/edit_item", methods=["POST"])
-def edit_item(): # Edit existing item
+@login_required
+def edit_item():
     original_name = request.form.get("original_name", "").strip()
     new_name      = request.form.get("name", "").strip()
     new_desc      = request.form.get("description", "").strip()
@@ -405,7 +503,8 @@ def edit_item(): # Edit existing item
 # -- Delete Label --
 
 @app.route("/delete_label", methods=["POST"])
-def delete_label(): # Delete item and associated files
+@login_required
+def delete_label():
     filepath  = request.form.get("filepath", "")
     page_type = request.form.get("page_type", "items")
     if not filepath:
@@ -438,13 +537,13 @@ def delete_label(): # Delete item and associated files
 
 # -- Stock Check --
 
-def _unwrap(data): # List (dict) -> dict
+def _unwrap(data):
     # EJ API sometimes returns a list with one dict instead of a dict directly
     if isinstance(data, list):
         return data[0] if data else None
     return data
 
-def _get_total_owned(item_id): # What it says on the tin - read the below comments for more info.
+def _get_total_owned(item_id):
     # Use RentalInventory from Items/Details - this is the active owned count EJ UI shows.
     # Fallback: DeviceList with inactive exclusion set if Details doesn't have the field.
     try:
@@ -475,7 +574,7 @@ def _get_total_owned(item_id): # What it says on the tin - read the below commen
 
     return None
 
-def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None): # Parse availability data from EJ and return a normalized dict with stock info.
+def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None):
     # Build normalised stock dict from EJ Items/Avail response.
     # Avail endpoint known response shapes:
     #   { "Inventory": 701, "CalcDay": "..." }        - available qty only (this EJ instance)
@@ -536,7 +635,8 @@ def _parse_avail(avail_data, item_id, name="Unknown", total_owned=None): # Parse
     }
 
 @app.route("/stock_check", methods=["GET", "POST"])
-def stock_check(): # Stock check page
+@login_required
+def stock_check():
     result    = None    # single item result (barcode / item_id search)
     results   = None    # multiple item results (name search)
     error     = None
@@ -662,7 +762,22 @@ def stock_check(): # Stock check page
 
 # -- Job Watching --
 
-def load_watchers(): # Load job watchers from JSON file
+def load_watchers(username=None, show_all=False):
+    # Returns all watchers from disk, optionally filtered by owner.
+    # show_all=True (admin toggle) returns everyone's watchers.
+    if not os.path.exists(WATCHERS_FILE):
+        return []
+    try:
+        with open(WATCHERS_FILE, "r") as f:
+            all_w = json.load(f)
+    except Exception:
+        return []
+    if show_all or not username:
+        return all_w
+    return [w for w in all_w if w.get("owner") == username]
+
+def load_all_watchers():
+    # Always returns the full list regardless of user - used for save operations.
     if not os.path.exists(WATCHERS_FILE):
         return []
     try:
@@ -671,23 +786,54 @@ def load_watchers(): # Load job watchers from JSON file
     except Exception:
         return []
 
-def save_watchers(watchers): # Save job watchers to JSON file
+def save_watchers(watchers):
     with open(WATCHERS_FILE, "w") as f:
         json.dump(watchers, f, indent=2)
 
 CALENDAR_FILE = "./calendar_watch.json"
 
-def load_calendar_watch(): # Load calendar watch data from JSON file
+def _empty_calendar():
+    return {"entries": {}, "last_checked": None, "new_entries": [], "errors": []}
+
+def _load_raw_calendar():
+    # Load the raw file - entries and new_entries are both keyed by username.
     if not os.path.exists(CALENDAR_FILE):
-        return {"entries": {}, "last_checked": None, "new_entries": [], "errors": []}
-    with open(CALENDAR_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return {"entries_by_user": {}, "new_entries_by_user": {}, "last_checked_by_user": {}, "errors_by_user": {}}
+    try:
+        with open(CALENDAR_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, ValueError):
+        return {"entries_by_user": {}, "new_entries_by_user": {}, "last_checked_by_user": {}, "errors_by_user": {}}
 
-def save_calendar_watch(data): # Save calendar watch data to JSON file
+def load_calendar_watch(username=None):
+    # Returns a view of the calendar data for the given user.
+    # All data is per-user - entries, new_entries, last_checked, errors.
+    raw = _load_raw_calendar()
+    if username:
+        return {
+            "entries":      raw.get("entries_by_user",      {}).get(username, {}),
+            "new_entries":  raw.get("new_entries_by_user",  {}).get(username, []),
+            "last_checked": raw.get("last_checked_by_user", {}).get(username),
+            "errors":       raw.get("errors_by_user",       {}).get(username, []),
+        }
+    return _empty_calendar()
+
+def save_calendar_watch(data, username=None, new_entries_for_user=None):
+    # Saves a user's calendar slice back into the shared file.
+    # data must be a user-view dict (as returned by load_calendar_watch).
+    raw = _load_raw_calendar()
+    if username:
+        raw.setdefault("entries_by_user",      {})[username] = data.get("entries", {})
+        raw.setdefault("last_checked_by_user", {})[username] = data.get("last_checked")
+        raw.setdefault("errors_by_user",       {})[username] = data.get("errors", [])
+        if new_entries_for_user is not None:
+            raw.setdefault("new_entries_by_user", {})[username] = new_entries_for_user
+        else:
+            raw.setdefault("new_entries_by_user", {})[username] = data.get("new_entries", [])
     with open(CALENDAR_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(raw, f, indent=2)
 
-def _format_ej_date(raw: str) -> str: # Format EJ date string into readable format
+def _format_ej_date(raw: str) -> str:
     # EJ dates look like "2026-03-16T09:00:00.0000000" - strip to first 19 chars to ignore fractional seconds
     if not raw:
         return ""
@@ -704,7 +850,7 @@ def _format_ej_date(raw: str) -> str: # Format EJ date string into readable form
     except ValueError:
         return raw
 
-def _parse_caption(caption: str): # Parse job caption into type and role
+def _parse_caption(caption: str):
     # "Prep | Trainee Prep"  →  type="Prep",     role="Trainee Prep"
     # "LED | LED Engineer"   →  type="LED",      role="LED Engineer"
     # "Edays - External"     →  type="Edays - External", role=None
@@ -713,10 +859,10 @@ def _parse_caption(caption: str): # Parse job caption into type and role
         return parts[0], parts[1]
     return caption.strip(), None
 
-def _entry_key(entry): # Generate a unique key for calendar entry
+def _entry_key(entry):
     return str(entry.get("Id") or f"{entry.get('Caption','')}|{entry.get('StartDate','')}")
 
-def _entry_summary(entry): # Generate a summary dict for a calendar
+def _entry_summary(entry):
     caption   = (entry.get("Caption")     or "").strip()
     post      = (entry.get("PostCaption") or "").strip()
     raw_start = entry.get("StartDate") or ""
@@ -740,30 +886,36 @@ def _entry_summary(entry): # Generate a summary dict for a calendar
         "start_raw": raw_start,
     }
 
-def refresh_calendar_watch(): # Fetch calendar entries from EJ and update the watch list
-    # Called by the background poll - fetches 35 days from today, diffs against stored entries.
-    data = load_calendar_watch()
-    if not ej_login():
-        data["errors"] = ["EasyJob not configured"]
-        save_calendar_watch(data)
+def refresh_calendar_watch(app_username=None, ej_username=None, ej_password=None):
+    # Fetches 14 days of calendar data for the triggering user only.
+    # All data (entries, new_entries, last_checked, errors) saved to that user's slice.
+    data = load_calendar_watch(username=app_username)
+    if not ej_username or not ej_password:
+        data["errors"] = ["No EasyJob credentials configured for this account."]
+        save_calendar_watch(data, username=app_username)
+        return
+    try:
+        ej.quick_login(username=ej_username, password=ej_password)
+    except Exception as e:
+        data["errors"] = [f"EasyJob login failed: {e}"]
+        save_calendar_watch(data, username=app_username)
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now().strftime("%Y-%m-%d")
     try:
-        raw = ej.get_calendar(start_date=today, days=14)
+        raw = ej.get_calendar(start_date=today_str, days=14)
     except Exception as e:
-        data["errors"] = [str(e)]
+        data["errors"]       = [str(e)]
         data["last_checked"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-        save_calendar_watch(data)
+        save_calendar_watch(data, username=app_username)
         return
 
     if not isinstance(raw, list):
-        data["errors"] = [f"Unexpected response: {type(raw).__name__}"]
+        data["errors"]       = [f"Unexpected response: {type(raw).__name__}"]
         data["last_checked"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-        save_calendar_watch(data)
+        save_calendar_watch(data, username=app_username)
         return
 
-    # Rebuild fresh each refresh - don't accumulate stale entries from previous runs
     known    = {}
     new_ones = []
     today    = datetime.now().date()
@@ -771,12 +923,9 @@ def refresh_calendar_watch(): # Fetch calendar entries from EJ and update the wa
 
     for entry in raw:
         caption = (entry.get("Caption") or "").lower()
-
-        # Only track job entries - skip Edays, holidays, and other non-job calendar items
         if not ("prep" in caption or "on site" in caption or "onsite" in caption):
             continue
 
-        # Drop entries whose end date is already in the past
         raw_end = (entry.get("EndDate") or entry.get("StartDate") or "")[:10]
         try:
             if datetime.strptime(raw_end, "%Y-%m-%d").date() < today:
@@ -790,50 +939,64 @@ def refresh_calendar_watch(): # Fetch calendar entries from EJ and update the wa
             new_ones.append(summary)
         known[key] = summary
 
+    # Merge new unseen entries - keep existing unseen ones that aren't being replaced
+    existing_new = data.get("new_entries", [])
+    new_ids      = {n["id"] for n in new_ones}
+    merged_new   = new_ones + [e for e in existing_new if e["id"] not in new_ids]
+
     data["entries"]      = known
+    data["new_entries"]  = merged_new[:50]
     data["last_checked"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     data["errors"]       = []
 
-    # Prepend new entries so most recent is first; keep last 50
-    existing_new = data.get("new_entries", [])
-    all_new      = new_ones + [e for e in existing_new if e["id"] not in {n["id"] for n in new_ones}]
-    data["new_entries"]  = all_new[:50]
-
-    save_calendar_watch(data)
+    save_calendar_watch(data, username=app_username)
 
 
 @app.route("/calendar_watch/refresh", methods=["POST"])
-def calendar_watch_refresh(): # Endpoint to trigger calendar refresh
-    threading.Thread(target=refresh_calendar_watch, daemon=True).start()
+@login_required
+def calendar_watch_refresh():
+    app_user = session.get("username", "")
+    ej_user  = session.get("ej_username", "")
+    ej_pass  = session.get("ej_password", "")
+    threading.Thread(target=refresh_calendar_watch, args=(app_user, ej_user, ej_pass), daemon=True).start()
     return jsonify({"started": True})
 
 @app.route("/calendar_watch/status", methods=["GET"])
-def calendar_watch_status(): # Endpoint to get current calendar watch status
-    return jsonify(load_calendar_watch())
+@login_required
+def calendar_watch_status():
+    return jsonify(load_calendar_watch(username=session.get("username")))
 
 @app.route("/calendar_watch/dismiss", methods=["POST"])
-def calendar_watch_dismiss(): # Endpoint to dismiss a single calendar entry
+@login_required
+def calendar_watch_dismiss():
     entry_id = request.form.get("entry_id", "").strip()
-    data     = load_calendar_watch()
-    data["new_entries"] = [e for e in data.get("new_entries", []) if e["id"] != entry_id]
-    save_calendar_watch(data)
+    username = session.get("username")
+    data     = load_calendar_watch(username=username)
+    new_entries = [e for e in data.get("new_entries", []) if e["id"] != entry_id]
+    save_calendar_watch(data, username=username, new_entries_for_user=new_entries)
     return jsonify({"ok": True})
 
 @app.route("/calendar_watch/dismiss_all", methods=["POST"])
-def calendar_watch_dismiss_all(): # Endpoint to dismiss all calendar entries
-    data = load_calendar_watch()
-    data["new_entries"] = []
-    save_calendar_watch(data)
+@login_required
+def calendar_watch_dismiss_all():
+    username = session.get("username")
+    data     = load_calendar_watch(username=username)
+    save_calendar_watch(data, username=username, new_entries_for_user=[])
     return jsonify({"ok": True})
 
 
 @app.route("/polling")
-def polling(): # Endpoint to display polling page
-    watchers = load_watchers()
-    ej_ok    = ej_login()
-    return render_template("polling.html", watchers=watchers, ej_ok=ej_ok, page="job_watching")
+@login_required
+def polling():
+    username  = session.get("username")
+    is_admin  = session.get("role") == "admin"
+    show_all  = is_admin and request.args.get("show_all") == "1"
+    watchers  = load_watchers(username=username, show_all=show_all)
+    ej_ok     = ej_login()
+    return render_template("polling.html", watchers=watchers, ej_ok=ej_ok,
+                           page="job_watching", show_all=show_all, is_admin=is_admin)
 
-def _shipping_status(day_time_out, day_time_in, returned=False): # Determine shipping status
+def _shipping_status(day_time_out, day_time_in, returned=False):
     # Derive shipping status from DayTimeOut / DayTimeIn.
     # "returned" is a manual flag set by staff via the UI.
     #
@@ -858,7 +1021,7 @@ def _shipping_status(day_time_out, day_time_in, returned=False): # Determine shi
     except (ValueError, TypeError):
         return None
 
-def _fetch_watcher_details(job_id, job_no): # Helper to fetch job details
+def _fetch_watcher_details(job_id, job_no):
     # Fetch job details + items for a watcher entry.
     # Returns (job_state_str, day_time_out, day_time_in, items_dict, error_str)
     try:
@@ -894,19 +1057,23 @@ def _fetch_watcher_details(job_id, job_no): # Helper to fetch job details
 
 
 @app.route("/polling/add", methods=["POST"])
-def polling_add(): # Endpoint to add a new job watcher
+@login_required
+def polling_add():
     job_no = request.form.get("job_no", "").strip()
     label  = request.form.get("label",  "").strip()
     if not job_no:
         return redirect(url_for("polling"))
 
-    watchers = load_watchers()
-    if any(w["job_no"] == job_no for w in watchers):
+    username = session.get("username")
+    all_watchers = load_all_watchers()
+    # Prevent duplicate per user (same job_no + same owner)
+    if any(w["job_no"] == job_no and w.get("owner") == username for w in all_watchers):
         return redirect(url_for("polling"))
 
     watcher = {
         "job_no":            job_no,
         "label":             label or job_no,
+        "owner":             username,
         "added":             datetime.now().strftime("%Y-%m-%d %H:%M"),
         "last_status":       None,
         "last_locked":       None,
@@ -940,17 +1107,19 @@ def polling_add(): # Endpoint to add a new job watcher
     except Exception as e:
         watcher["error"] = str(e)
 
-    watchers.append(watcher)
-    save_watchers(watchers)
+    all_watchers.append(watcher)
+    save_watchers(all_watchers)
     return redirect(url_for("polling"))
 
 @app.route("/polling/mark_returned", methods=["POST"])
-def polling_mark_returned(): # Endpoint to mark a job as returned 
+@login_required
+def polling_mark_returned():
     job_no   = request.form.get("job_no", "").strip()
     undo     = request.form.get("undo", "0") == "1"
-    watchers = load_watchers()
+    username = session.get("username")
+    watchers = load_all_watchers()
     for w in watchers:
-        if w["job_no"] == job_no:
+        if w["job_no"] == job_no and w.get("owner") == username:
             w["returned"]          = not undo
             w["shipping_status"]   = _shipping_status(
                 w.get("day_time_out"), w.get("day_time_in"), returned=not undo
@@ -959,36 +1128,44 @@ def polling_mark_returned(): # Endpoint to mark a job as returned
     return redirect(url_for("polling"))
 
 @app.route("/polling/remove", methods=["POST"])
-def polling_remove(): # Endpoint to remove a job watcher
+@login_required
+def polling_remove():
     job_no   = request.form.get("job_no", "").strip()
-    watchers = [w for w in load_watchers() if w["job_no"] != job_no]
+    username = session.get("username")
+    watchers = [w for w in load_all_watchers()
+                if not (w["job_no"] == job_no and w.get("owner") == username)]
     save_watchers(watchers)
     return redirect(url_for("polling"))
 
 @app.route("/polling/clear_flag", methods=["POST"])
-def polling_clear_flag(): # Endpoint to clear change flag for a job watcher
+@login_required
+def polling_clear_flag():
     job_no   = request.form.get("job_no", "").strip()
-    watchers = load_watchers()
+    username = session.get("username")
+    watchers = load_all_watchers()
 
-    # If the change being acknowledged is "Past Return Date", auto-delete the watcher
-    target = next((w for w in watchers if w["job_no"] == job_no), None)
+    target = next((w for w in watchers
+                   if w["job_no"] == job_no and w.get("owner") == username), None)
+    # If acknowledging "Past Return Date", auto-delete the watcher
     if target and target.get("shipping_status") == "Past Return Date":
-        watchers = [w for w in watchers if w["job_no"] != job_no]
-    else:
-        for w in watchers:
-            if w["job_no"] == job_no:
-                w["has_change"] = False
+        watchers = [w for w in watchers
+                    if not (w["job_no"] == job_no and w.get("owner") == username)]
+    elif target:
+        target["has_change"] = False
 
     save_watchers(watchers)
     return redirect(url_for("polling"))
 
 @app.route("/polling/refresh", methods=["POST"])
-def polling_refresh(): # Endpoint to refresh job watcher statuses
-    watchers = load_watchers()
+@login_required
+def polling_refresh():
+    username     = session.get("username")
+    all_watchers = load_all_watchers()
+    mine         = [w for w in all_watchers if w.get("owner") == username]
     if not ej_login():
         return redirect(url_for("polling"))
 
-    for w in watchers:
+    for w in mine:
         try:
             job_info = ej.get_job_info(w["job_no"])
             if not job_info:
@@ -1021,7 +1198,10 @@ def polling_refresh(): # Endpoint to refresh job watcher statuses
         except Exception as e:
             w["error"] = str(e)
 
-    save_watchers(watchers)
+    # Merge refreshed entries back into the full list
+    mine_nos = {w["job_no"] for w in mine}
+    others   = [w for w in all_watchers if w.get("owner") != username]
+    save_watchers(others + mine)
     return redirect(url_for("polling"))
 
 
@@ -1031,17 +1211,17 @@ def polling_refresh(): # Endpoint to refresh job watcher statuses
 
 SYNC_STATUS_FILE = "./sync_status.json"
 
-def load_sync_status(): # Load EJ sync status from JSON file
+def load_sync_status():
     if not os.path.exists(SYNC_STATUS_FILE):
         return {"last_sync": None, "added": 0, "skipped": 0, "errors": []}
     with open(SYNC_STATUS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_sync_status(status): # Save EJ sync status to JSON file
+def save_sync_status(status):
     with open(SYNC_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def sync_ej_items(): # Background worker to sync items from EJ into items.csv
+def sync_ej_items(ej_username=None, ej_password=None):
     # Pull full item list from EJ and merge into items.csv.
     #
     # Items WITH devices (individually barcoded):
@@ -1062,8 +1242,13 @@ def sync_ej_items(): # Background worker to sync items from EJ into items.csv
         save_sync_status(r)
         return r
 
-    if not ej_login():
-        result["errors"].append("EasyJob not configured - check .env credentials.")
+    if not ej_username or not ej_password:
+        result["errors"].append("No EasyJob credentials configured for this account.")
+        return _finish(result)
+    try:
+        ej.quick_login(username=ej_username, password=ej_password)
+    except Exception as e:
+        result["errors"].append(f"EasyJob login failed: {e}")
         return _finish(result)
 
     try:
@@ -1131,7 +1316,8 @@ def sync_ej_items(): # Background worker to sync items from EJ into items.csv
 
 
 @app.route("/sync_items", methods=["POST"])
-def sync_items_route(): # Endpoint to trigger EJ item sync
+@admin_required
+def sync_items_route():
     status = load_sync_status()
     if status.get("running"):
         return jsonify({"already_running": True})
@@ -1139,11 +1325,14 @@ def sync_items_route(): # Endpoint to trigger EJ item sync
     status["running"] = True
     status["last_sync"] = None
     save_sync_status(status)
-    threading.Thread(target=sync_ej_items, daemon=True).start()
+    ej_user = session.get("ej_username", "")
+    ej_pass = session.get("ej_password", "")
+    threading.Thread(target=sync_ej_items, args=(ej_user, ej_pass), daemon=True).start()
     return jsonify({"started": True})
 
 
 @app.route("/sync_status", methods=["GET"])
+@login_required
 def sync_status_route():
     return jsonify(load_sync_status())
 
@@ -1153,17 +1342,19 @@ def sync_status_route():
 
 IMPORT_STATUS_FILE = "./import_status.json"
 
-def load_import_status(): # Load import status from JSON file
+def load_import_status():
     if not os.path.exists(IMPORT_STATUS_FILE):
         return None
     with open(IMPORT_STATUS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_import_status(status): # Save import status to JSON file
+def save_import_status(status):
     with open(IMPORT_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def run_import(items): # Background worker for the one-time JSON import
+def run_import(items):
+    # Background worker for the one-time JSON import.
+    #
     # For each item:
     #   - Calls DeviceList to check if individually barcoded
     #   - Barcoded  → CSV entry with no barcode/label
@@ -1255,7 +1446,8 @@ def run_import(items): # Background worker for the one-time JSON import
 
 
 @app.route("/import", methods=["GET"])
-def import_page(): # Endpoint to display the import page with current status
+@admin_required
+def import_page():
     status       = load_import_status()
     fetch_status = load_fetch_status()
     return render_template("import.html", page="import", status=status, fetch_running=fetch_status.get("running", False))
@@ -1265,7 +1457,7 @@ FETCH_STATUS_FILE = "./fetch_status.json"
 EJ_EXPORT_FILE    = "./ej_export.json"
 
 # fetch_status.json - metadata only; items live in ej_export.json to avoid huge in-memory JSON
-def load_fetch_status(): # Load fetch status from JSON file
+def load_fetch_status():
     if not os.path.exists(FETCH_STATUS_FILE):
         return {"running": False}
     try:
@@ -1274,22 +1466,23 @@ def load_fetch_status(): # Load fetch status from JSON file
     except (json.JSONDecodeError, ValueError):
         return {"running": False}  # empty or corrupt file - treat as fresh
 
-def save_fetch_status(status): # Save fetch status to JSON file
+def save_fetch_status(status):
     with open(FETCH_STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(status, f, indent=2)
 
-def load_ej_export(): # Load fetched EJ items from JSON file
+def load_ej_export():
     if not os.path.exists(EJ_EXPORT_FILE):
         return []
     with open(EJ_EXPORT_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def _run_fetch(): # Background worker to fetch items from EJ and save to disk
+def _run_fetch(ej_username=None, ej_password=None):
     save_fetch_status({"running": True, "count": 0, "error": None})
+    if not ej_username or not ej_password:
+        save_fetch_status({"running": False, "count": 0, "error": "No EasyJob credentials configured for this account."})
+        return
     try:
-        if not ej_login():
-            save_fetch_status({"running": False, "count": 0, "error": "EasyJob not configured - check .env credentials"})
-            return
+        ej.quick_login(username=ej_username, password=ej_password)
         items = ej.get_all_items_full()
         if not isinstance(items, list):
             save_fetch_status({"running": False, "count": 0, "error": f"Unexpected response: {type(items).__name__}"})
@@ -1302,21 +1495,26 @@ def _run_fetch(): # Background worker to fetch items from EJ and save to disk
 
 
 @app.route("/import/fetch_from_ej", methods=["POST"])
-def import_fetch_from_ej(): # Endpoint to trigger fetching items from EJ
+@admin_required
+def import_fetch_from_ej():
     status = load_fetch_status()
     if status.get("running"):
         return jsonify({"already_running": True})
-    threading.Thread(target=_run_fetch, daemon=True).start()
+    ej_user = session.get("ej_username", "")
+    ej_pass = session.get("ej_password", "")
+    threading.Thread(target=_run_fetch, args=(ej_user, ej_pass), daemon=True).start()
     return jsonify({"started": True})
 
 
 @app.route("/import/fetch_status", methods=["GET"])
-def import_fetch_status(): # Endpoint to get current fetch status
+@admin_required
+def import_fetch_status():
     return jsonify(load_fetch_status())
 
 
 @app.route("/import/start", methods=["POST"])
-def import_start(): # Endpoint to start the import process after fetching items from EJ
+@admin_required
+def import_start():
     if load_import_status() and load_import_status().get("running"):
         return jsonify({"error": "Import already running"}), 409
 
@@ -1339,17 +1537,143 @@ def import_start(): # Endpoint to start the import process after fetching items 
 
 
 @app.route("/import/status", methods=["GET"])
-def import_status(): # Endpoint to get current import status
+@admin_required
+def import_status():
     status = load_import_status()
     if not status:
         return jsonify({"running": False, "never_run": True})
     return jsonify(status)
 
 
+# -- Login / Logout --
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("username"):
+        return redirect(url_for("index"))
+    error    = None
+    username = ""
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        users    = load_users()
+        user     = users.get(username)
+        if user and check_password_hash(user["password_hash"], password):
+            session.clear()
+            session["username"]     = username
+            session["display_name"] = user.get("display_name", username)
+            session["role"]         = user.get("role", "user")
+            session["ej_username"]  = user.get("ej_username", "")
+            session["ej_password"]  = decrypt_field(user.get("ej_password", ""))
+            ej.TOKEN = None
+            return redirect(url_for("index"))
+        error = "Invalid username or password."
+    return render_template("login.html", error=error, username=username)
+
+@app.route("/logout")
+def logout():
+    ej.TOKEN = None
+    session.clear()  # clears ej_token along with everything else
+    return redirect(url_for("login"))
+
+
+# -- Admin: User Management --
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    users   = load_users()
+    message = request.args.get("message")
+    msg_type = request.args.get("msg_type", "success")
+    return render_template("admin_users.html", users=users,
+                           message=message, message_type=msg_type, page="admin_users")
+
+@app.route("/admin/users/add", methods=["POST"])
+@admin_required
+def admin_add_user():
+    username     = request.form.get("username", "").strip().lower()
+    display_name = request.form.get("display_name", "").strip()
+    password     = request.form.get("password", "")
+    role         = request.form.get("role", "user")
+    ej_username  = request.form.get("ej_username", "").strip()
+    ej_password  = request.form.get("ej_password", "")
+
+    if not username or not password:
+        return redirect(url_for("admin_users", message="Username and password are required.", msg_type="danger"))
+
+    users = load_users()
+    if username in users:
+        return redirect(url_for("admin_users", message=f"User '{username}' already exists.", msg_type="danger"))
+
+    users[username] = {
+        "password_hash": generate_password_hash(password),
+        "role":          role,
+        "display_name":  display_name or username,
+        "ej_username":   ej_username,
+        "ej_password":   encrypt_field(ej_password),
+    }
+    save_users(users)
+    return redirect(url_for("admin_users", message=f"User '{username}' created."))
+
+@app.route("/admin/users/edit", methods=["POST"])
+@admin_required
+def admin_edit_user():
+    username     = request.form.get("username", "").strip().lower()
+    display_name = request.form.get("display_name", "").strip()
+    password     = request.form.get("password", "")
+    role         = request.form.get("role", "user")
+    ej_username  = request.form.get("ej_username", "").strip()
+    ej_password  = request.form.get("ej_password", "")
+
+    users = load_users()
+    if username not in users:
+        return redirect(url_for("admin_users", message="User not found.", msg_type="danger"))
+
+    users[username]["role"]         = role
+    users[username]["display_name"] = display_name or username
+    users[username]["ej_username"]  = ej_username
+    if password:
+        users[username]["password_hash"] = generate_password_hash(password)
+    if ej_password:
+        users[username]["ej_password"] = encrypt_field(ej_password)
+
+    save_users(users)
+
+    # If editing the currently logged-in user, refresh their session data
+    if username == session.get("username"):
+        session["display_name"] = users[username]["display_name"]
+        session["role"]         = users[username]["role"]
+        session["ej_username"]  = users[username]["ej_username"]
+        if ej_password:
+            session["ej_password"] = ej_password  # plaintext - user just typed it
+
+    return redirect(url_for("admin_users", message=f"User '{username}' updated."))
+
+@app.route("/admin/users/delete", methods=["POST"])
+@admin_required
+def admin_delete_user():
+    username = request.form.get("username", "").strip().lower()
+    if username == session.get("username"):
+        return redirect(url_for("admin_users", message="You can't delete your own account.", msg_type="danger"))
+    users = load_users()
+    if username in users:
+        del users[username]
+        save_users(users)
+    return redirect(url_for("admin_users", message=f"User '{username}' deleted."))
+
+
+# -- 403 page --
+
+@app.route("/403")
+def forbidden():
+    return render_template("403.html", page=None), 403
+
+
 # -- Barcode Scanner --
 
 @app.route("/barcode_finder")
-def barcode_finder(): # Endpoint to display the barcode finder page
+@login_required
+def barcode_finder():
     return render_template("barcode_finder.html", page="barcode_finder")
 
 
