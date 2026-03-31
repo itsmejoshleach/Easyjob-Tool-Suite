@@ -117,9 +117,9 @@
 ☐ Replace CSV with SQLite/PostgreSQL for better performance
 ☐ Implement search result caching for speed
 ☐ Add input validation
-☐ Make Job watchers attached to the login creds
-☐ Make Calendar watchers attached to the login creds
-☐ Make custom barcodes attached to the login creds
+✔ Make Job watchers attached to the login creds @done(26-03-29 21:13)
+✔ Make Calendar watchers attached to the login creds @done(26-03-29 21:13)
+✔ Make custom barcodes attached to the login creds @done(26-03-29 21:13)
 
 ---
 
@@ -176,23 +176,24 @@ Create more admin pages:
 
 ### Admin / Access Control
 Admin (Full access):
-☐ Import Items
-☐ Barcode Finder
-☐ Custom Barcodes
-☐ Job Watching
-☐ Stock Check
-☐ Item Search
-☐ Easyjob Sync
-☐ Add new items
-☐ Edit Item descriptions
-☐ Edit Item barcodes
+✔ Import Items @done(26-03-29 21:13)
+✔ Barcode Finder @done(26-03-29 21:13)
+✔ Custom Barcodes @done(26-03-29 21:13)
+✔ Job Watching @done(26-03-29 21:13)
+✔ Stock Check @done(26-03-29 21:13)
+✔ Item Search @done(26-03-29 21:13)
+✔ Easyjob Sync @done(26-03-29 21:13)
+✔ Add new items @done(26-03-29 21:13)
+✔ Edit Item descriptions @done(26-03-29 21:13)
+✔ Edit Item barcodes @done(26-03-29 21:13)
+✔ @done(26-03-29 21:13)
 
 User (View only):
-☐ Barcode Finder
-☐ Job Watching
-☐ Custom Barcodes
-☐ Stock Check
-☐ Item Search
+✔ Barcode Finder @done(26-03-29 21:13)
+✔ Job Watching @done(26-03-29 21:13)
+✔ Custom Barcodes @done(26-03-29 21:13)
+✔ Stock Check @done(26-03-29 21:13)
+✔ Item Search @done(26-03-29 21:13)
 
 ---
 
